@@ -2,7 +2,7 @@
 
 # 🕴️Dress-Up
 
-[SUIT][suit-rfc] software updates for constrained devices, for `no-std` environments.
+[SUIT][suit-rfc] software updates for constrained devices, for `no_std` environments.
 
 🚧 This crate is still under heavy construction 🚧
 
