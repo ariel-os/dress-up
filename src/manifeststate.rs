@@ -33,7 +33,6 @@ impl<'a> ManifestState<'a> {
         Ok(())
     }
 
-
     pub(crate) fn set_vendor_id(&mut self, vendor: Uuid) {
         self.vendor_id = Some(vendor);
     }
@@ -71,7 +70,10 @@ impl<'a> ManifestState<'a> {
         self.image_digest = Some(digest);
     }
 
-    pub(crate) fn image_digest_from_cbor(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
+    pub(crate) fn image_digest_from_cbor(
+        &mut self,
+        decoder: &mut Decoder<'a>,
+    ) -> Result<(), Error> {
         let bytes = decoder.bytes()?;
         let mut inner = Decoder::new(bytes);
         let digest = SuitDigest::decode(&mut inner, &mut ())?;
@@ -126,6 +128,7 @@ impl<'a> ManifestState<'a> {
                 SuitParameter::Uri => self.uri_from_cbor(decoder)?,
                 SuitParameter::SourceComponent => todo!(),
                 SuitParameter::DeviceId => self.device_id_from_cbor(decoder)?,
+                SuitParameter::Content => self.content_from_cbor(decoder)?,
                 param => return Err(Error::UnsupportedParameter(param.into())),
             };
         }
@@ -187,9 +190,9 @@ mod tests {
     fn image_digest() {
         use crate::digest::SuitDigestAlgorithm;
         let input = std::vec![
-            0xA1, 0x03, 0x58, 0x24, 0x82, 0x2F, 0x58, 0x20, 0x01, 0xBA, 0x47, 0x19, 0xC8, 0x0B, 0x6F, 0xE9,
-            0x11, 0xB0, 0x91, 0xA7, 0xC0, 0x51, 0x24, 0xB6, 0x4E, 0xEE, 0xCE, 0x96, 0x4E, 0x09,
-            0xC0, 0x58, 0xEF, 0x8F, 0x98, 0x05, 0xDA, 0xCA, 0x54, 0x6B
+            0xA1, 0x03, 0x58, 0x24, 0x82, 0x2F, 0x58, 0x20, 0x01, 0xBA, 0x47, 0x19, 0xC8, 0x0B,
+            0x6F, 0xE9, 0x11, 0xB0, 0x91, 0xA7, 0xC0, 0x51, 0x24, 0xB6, 0x4E, 0xEE, 0xCE, 0x96,
+            0x4E, 0x09, 0xC0, 0x58, 0xEF, 0x8F, 0x98, 0x05, 0xDA, 0xCA, 0x54, 0x6B
         ];
         let hash: &[u8] = &std::vec![
             0x01, 0xba, 0x47, 0x19, 0xc8, 0x0b, 0x6f, 0xe9, 0x11, 0xb0, 0x91, 0xa7, 0xc0, 0x51,
