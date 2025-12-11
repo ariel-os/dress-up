@@ -243,6 +243,19 @@ impl<'a> Manifest<'a, Authenticated> {
         }
     }
 
+    fn directive_write(
+        &self,
+        state: &ManifestState,
+        component: &Component,
+        os_hooks: &impl OperatingHooks,
+    ) -> Result<(), Error> {
+        if let Some(content) = state.content {
+            os_hooks.component_write(component, state.component_slot, 0, content)
+        } else {
+            Err(Error::ParameterNotSet(0))
+        }
+    }
+
     fn try_each(
         &self,
         state: &mut ManifestState<'a>,
@@ -341,7 +354,10 @@ impl<'a> Manifest<'a, Authenticated> {
                         self.cond_vendor_identifier(&state, component.component(), os_hooks)?;
                         Self::decode_reporting_policy(&mut decoder)?;
                     }
-                    SuitCommand::WriteContent => todo!(),
+                    SuitCommand::WriteContent => {
+                        self.directive_write(&state, component.component(), os_hooks)?;
+                        Self::decode_reporting_policy(&mut decoder)?;
+                    }
                     SuitCommand::Custom(_n) => todo!(),
                 }
             }
@@ -462,16 +478,22 @@ mod tests {
     extern crate std;
     use super::*;
     use crate::digest::{SuitDigest, SuitDigestAlgorithm};
+    use std::cell::Cell;
     use uuid::{uuid, Uuid};
 
     struct TestHooks {
         class: Uuid,
         vendor: Uuid,
+        buf: Cell<[u8; 4]>,
     }
 
     impl TestHooks {
         fn new(class: Uuid, vendor: Uuid) -> Self {
-            TestHooks { class, vendor }
+            TestHooks {
+                class,
+                vendor,
+                buf: [0u8; _].into(),
+            }
         }
     }
 
@@ -498,31 +520,41 @@ mod tests {
             &self,
             _component: &crate::component::Component,
             _slot: Option<u64>,
-            _offset: usize,
-            _bytes: &mut [u8],
+            offset: usize,
+            bytes: &mut [u8],
         ) -> Result<(), Error> {
-            Err(Error::InvalidCommonSection)
+            if bytes.len() + offset > self.buf.get().len() {
+                return Err(Error::InvalidCommandSequence(0));
+            }
+            bytes.copy_from_slice(&self.buf.get()[offset..offset + bytes.len()]);
+            Ok(())
         }
 
         fn component_write(
             &self,
             _component: &crate::component::Component,
             _slot: Option<u64>,
-            _offset: usize,
-            _bytes: &[u8],
+            offset: usize,
+            bytes: &[u8],
         ) -> Result<(), Error> {
-            todo!() // Not used in tests
+            if bytes.len() + offset > self.buf.get().len() {
+                return Err(Error::InvalidCommandSequence(0));
+            }
+            let mut buf = self.buf.get();
+            buf[offset..offset + bytes.len()].copy_from_slice(bytes);
+            self.buf.set(buf);
+            Ok(())
         }
 
         fn component_capacity(
             &self,
             _component: &crate::component::Component,
         ) -> Result<usize, Error> {
-            Ok(0)
+            Ok(self.buf.get().len())
         }
 
         fn component_size(&self, _component: &crate::component::Component) -> Result<usize, Error> {
-            Ok(0)
+            Ok(self.buf.get().len())
         }
     }
 
@@ -560,5 +592,28 @@ mod tests {
         state.set_image_size(34768);
 
         assert_eq!(res.unwrap(), state);
+    }
+
+    #[test]
+    fn write_verify() {
+        let input: &[u8] = &std::vec![
+            0x8A, 0x14, 0xA5, 0x01, 0x50, 0xFA, 0x6B, 0x4A, 0x53, 0xD5, 0xAD, 0x5F, 0xDF, 0xBE,
+            0x9D, 0xE6, 0x63, 0xE4, 0xD4, 0x1F, 0xFE, 0x02, 0x50, 0x14, 0x92, 0xAF, 0x14, 0x25,
+            0x69, 0x5E, 0x48, 0xBF, 0x42, 0x9B, 0x2D, 0x51, 0xF2, 0xAB, 0x45, 0x03, 0x58, 0x24,
+            0x82, 0x2F, 0x58, 0x20, 0xB1, 0x6A, 0xA5, 0x6B, 0xE3, 0x88, 0x0D, 0x18, 0xCD, 0x41,
+            0xE6, 0x83, 0x84, 0xCF, 0x1E, 0xC8, 0xC1, 0x76, 0x80, 0xC4, 0x5A, 0x02, 0xB1, 0x57,
+            0x5D, 0xC1, 0x51, 0x89, 0x23, 0xAE, 0x8B, 0x0E, 0x0E, 0x19, 0x87, 0xD0, 0x12, 0x44,
+            0x74, 0xBA, 0x25, 0x21, 0x01, 0x0F, 0x02, 0x0F, 0x12, 0x0F, 0x03, 0x0F
+        ];
+        let manifest = Manifest::<Authenticated>::from_bytes::<Authenticated>(input.into());
+        let component_name = &std::vec![0x81, 0x41, 0x00];
+        let component = Component::from_bytes(component_name);
+        let info = ComponentInfo::new(component, 0);
+        let mut state = ManifestState::default();
+        let vendor = uuid!("fa6b4a53-d5ad-5fdf-be9d-e663e4d41ffe");
+        let class = uuid!("1492af14-2569-5e48-bf42-9b2d51f2ab45");
+        let hooks = TestHooks::new(class, vendor);
+        let res = manifest.process_sequence(input.into(), state.clone(), &info, &hooks);
+        assert!(res.is_ok());
     }
 }
