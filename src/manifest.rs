@@ -504,6 +504,16 @@ mod tests {
             Err(Error::InvalidCommonSection)
         }
 
+        fn component_write(
+            &self,
+            _component: &crate::component::Component,
+            _slot: Option<u64>,
+            _offset: usize,
+            _bytes: &[u8],
+        ) -> Result<(), Error> {
+            todo!() // Not used in tests
+        }
+
         fn component_capacity(
             &self,
             _component: &crate::component::Component,

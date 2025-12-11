@@ -77,6 +77,14 @@ pub trait OperatingHooks {
         bytes: &mut [u8],
     ) -> Result<(), Error>;
 
+    fn component_write(
+        &self,
+        component: &component::Component,
+        slot: Option<u64>,
+        offset: usize,
+        bytes: &[u8],
+    ) -> Result<(), Error>;
+
     fn component_size(&self, component: &component::Component) -> Result<usize, Error>;
 
     fn component_capacity(&self, component: &component::Component) -> Result<usize, Error>;
