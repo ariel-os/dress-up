@@ -52,6 +52,16 @@ impl OperatingHooks for OsHooks {
     ) -> Result<usize, dress_up::error::Error> {
         todo!()
     }
+
+    fn component_write(
+        &self,
+        _component: &dress_up::component::Component,
+        _slot: Option<u64>,
+        _offset: usize,
+        _bytes: &[u8],
+    ) -> Result<(), dress_up::error::Error> {
+        todo!()
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
