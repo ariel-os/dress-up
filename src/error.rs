@@ -10,6 +10,7 @@ pub enum Error {
     InvalidCommonSection,
     NoAuthObject,
     NoCommonSection,
+    NoCommandSection(i16),
     NoComponentList,
     NoManifestObject,
     ParameterNotSet(usize),
@@ -40,13 +41,20 @@ impl core::fmt::Display for Error {
             Self::InvalidCommonSection => write!(f, "invalid common section found in manifest"),
             Self::NoAuthObject => write!(f, "no Authentication object in manifest"),
             Self::NoCommonSection => write!(f, "no common section found in manifest"),
+            Self::NoCommandSection(n) => write!(f, "no command sequence {n} found in manifest"),
             Self::NoComponentList => write!(f, "no component list found in manifest"),
             Self::NoManifestObject => write!(f, "no Manifest object in manifest"),
-            Self::ParameterNotSet(n) => write!(f, "parameter required for condition at {n} not set"),
+            Self::ParameterNotSet(n) => {
+                write!(f, "parameter required for condition at {n} not set")
+            }
             Self::UnexpectedCbor(pos) => write!(f, "unexpected CBOR found at {pos}"),
-            Self::UnexpectedIndefiniteLength(n) => write!(f, "unexpected indefinite length cbor container at {n}"),
+            Self::UnexpectedIndefiniteLength(n) => {
+                write!(f, "unexpected indefinite length cbor container at {n}")
+            }
             Self::UnsupportedCommand(n) => write!(f, "command {n} not supported"),
-            Self::UnsupportedComponentIdentifier(n) => write!(f, "component identifier {n} not supported"),
+            Self::UnsupportedComponentIdentifier(n) => {
+                write!(f, "component identifier {n} not supported")
+            }
             Self::UnsupportedDigestAlgo(n) => write!(f, "digest algorithm {n} not supported"),
             Self::UnsupportedManifestVersion => write!(f, "manifest version not supported"),
             Self::UnsupportedParameter(n) => write!(f, "parameter {n} not supported"),
@@ -61,8 +69,7 @@ impl From<minicbor::decode::Error> for Error {
     fn from(err: minicbor::decode::Error) -> Self {
         if err.is_end_of_input() {
             Self::EndOfInput
-        }
-        else {
+        } else {
             let pos = err.position().unwrap_or(0);
             Self::UnexpectedCbor(pos)
         }

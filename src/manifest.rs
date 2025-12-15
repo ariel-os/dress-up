@@ -85,19 +85,22 @@ impl<'a, S: State> Manifest<'a, S> {
 }
 
 impl<'a> Manifest<'a, Authenticated> {
-    fn get_common(&self) -> Result<&'a ByteSlice, Error> {
+    fn find_command_sequence(
+        &self,
+        section: crate::consts::Manifest,
+    ) -> Result<Option<&'a ByteSlice>, Error> {
         let mut decoder = self.decoder.clone();
-        decoder
+        Ok(decoder
             .map_iter::<i16, Token>()?
             .find_map(|item| match item {
-                Ok((key, Token::Bytes(value)))
-                    if key == crate::consts::Manifest::CommonData.into() =>
-                {
-                    Some(Ok(value.into()))
-                }
+                Ok((key, Token::Bytes(value))) if key == section.into() => Some(value.into()),
                 _ => None,
-            })
-            .ok_or(Error::NoCommonSection)?
+            }))
+    }
+
+    fn get_common(&self) -> Result<&'a ByteSlice, Error> {
+        self.find_command_sequence(crate::consts::Manifest::CommonData)?
+            .ok_or(Error::NoCommonSection)
     }
 
     fn decode_common(
@@ -122,14 +125,6 @@ impl<'a> Manifest<'a, Authenticated> {
         } else {
             Err(Error::InvalidCommonSection)
         }
-    }
-
-    pub fn process_full(&self) -> Result<u64, Error> {
-        let _state = ManifestState::default();
-        let common = self.get_common()?;
-        let (_components, _common) = self.decode_common(common)?;
-        // Separate out per component, common first, then the step
-        Ok(0)
     }
 
     fn cond_class_identifier(
@@ -365,9 +360,16 @@ impl<'a> Manifest<'a, Authenticated> {
         Ok(state)
     }
 
-    pub fn execute_image_validation(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+    fn execute_section_with_common(
+        &self,
+        os_hooks: &impl OperatingHooks,
+        section: crate::consts::Manifest,
+    ) -> Result<(), Error> {
         let start_state = ManifestState::default();
         let common = self.get_common()?;
+        let section = self
+            .find_command_sequence(section)?
+            .ok_or(Error::NoCommandSection(section.into()))?;
         let (components, common) = self.decode_common(common)?;
         let mut component_decoder = Decoder::new(components);
         for (idx, component) in ComponentIter::new(&mut component_decoder)?.enumerate() {
@@ -376,10 +378,42 @@ impl<'a> Manifest<'a, Authenticated> {
                     .try_into()
                     .map_err(|_| Error::UnexpectedCbor(self.decoder.position()))?;
                 let component_info = ComponentInfo::new(component, idx);
-                let _state =
+                let state =
                     self.process_sequence(common, start_state.clone(), &component_info, os_hooks)?;
+                self.process_sequence(section, state, &component_info, os_hooks)?;
             }
         }
+        Ok(())
+    }
+
+    pub fn execute_payload_fetch(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadFetch)
+    }
+
+    pub fn execute_payload_installation(
+        &self,
+        os_hooks: &impl OperatingHooks,
+    ) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadInstallation)
+    }
+
+    pub fn execute_image_validation(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageValidation)
+    }
+
+    pub fn execute_image_loading(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageLoading)
+    }
+    pub fn execute_invoke(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageInvocation)
+    }
+
+    pub fn execute_full(&self) -> Result<(), Error> {
+        let _state = ManifestState::default();
+        let common = self.get_common()?;
+        let (_components, _common) = self.decode_common(common)?;
+        // Separate out per component, common first, then the step
+        todo!();
         Ok(())
     }
 }
