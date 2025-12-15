@@ -365,7 +365,7 @@ impl<'a> Manifest<'a, Authenticated> {
         Ok(state)
     }
 
-    pub fn process_validate(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+    pub fn execute_image_validation(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
         let start_state = ManifestState::default();
         let common = self.get_common()?;
         let (components, common) = self.decode_common(common)?;
