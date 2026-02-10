@@ -1,10 +1,10 @@
 [package]
 name = "dress-up"
-categories = ["no-std"]
-description = "`no-std` SUIT manifest parser"
 version = "0.1.0"
 edition = "2021"
+description = "`no-std` SUIT manifest parser"
 license = "MIT OR Apache-2.0"
+categories = ["no-std"]
 
 [dependencies]
 digest = { version = "0.10.7", default-features = false }
