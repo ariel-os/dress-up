@@ -29,7 +29,10 @@ impl ReportingPolicy {
 }
 
 impl<'b, C> Decode<'b, C> for ReportingPolicy {
-    fn decode(d: &mut minicbor::Decoder<'b>, _ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+    fn decode(
+        d: &mut minicbor::Decoder<'b>,
+        _ctx: &mut C,
+    ) -> Result<Self, minicbor::decode::Error> {
         let policy = d.u8()?;
         if policy > 15 {
             return Err(minicbor::decode::Error::type_mismatch(

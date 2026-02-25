@@ -103,10 +103,7 @@ impl<'a> ComponentInfo<'a> {
         &self.component
     }
 
-    pub(crate) fn in_applylist(
-        &self,
-        decoder: &mut Decoder,
-    ) -> Result<bool, Error> {
+    pub(crate) fn in_applylist(&self, decoder: &mut Decoder) -> Result<bool, Error> {
         match decoder.datatype()? {
             minicbor::data::Type::Bool => {
                 if decoder.bool()? {
