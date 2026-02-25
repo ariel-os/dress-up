@@ -20,8 +20,11 @@ pub enum SuitDigestAlgorithm {
     Shake256 = -45,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct SuitDigest<'a> {
+/// A digest as provided by a manifest.
+///
+/// Combines the digest and the algorithm.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SuitDigest<'a> {
     algo: SuitDigestAlgorithm,
     digest: &'a ByteSlice,
 }
@@ -173,6 +176,7 @@ mod tests {
         let digest = SuitDigest::new(SuitDigestAlgorithm::Sha256, solution.into());
         let mut hasher = digest.hasher().unwrap();
         hasher.update(input);
+        assert_eq!(hasher.output_size(), solution.len());
         assert_eq!(digest.match_hasher(hasher), Ok(true));
     }
 
@@ -188,6 +192,7 @@ mod tests {
         let digest = SuitDigest::new(SuitDigestAlgorithm::Sha384, solution.into());
         let mut hasher = digest.hasher().unwrap();
         hasher.update(input);
+        assert_eq!(hasher.output_size(), solution.len());
         assert_eq!(digest.match_hasher(hasher), Ok(true));
     }
 
@@ -204,6 +209,7 @@ mod tests {
         let digest = SuitDigest::new(SuitDigestAlgorithm::Sha512, solution.into());
         let mut hasher = digest.hasher().unwrap();
         hasher.update(input);
+        assert_eq!(hasher.output_size(), solution.len());
         assert_eq!(digest.match_hasher(hasher), Ok(true));
     }
 
@@ -221,6 +227,7 @@ mod tests {
         let digest = SuitDigest::new(SuitDigestAlgorithm::Shake128, solution.into());
         let mut hasher = digest.hasher().unwrap();
         hasher.update(input);
+        assert_eq!(hasher.output_size(), solution.len());
         assert_eq!(digest.match_hasher(hasher), Ok(true));
     }
 
@@ -241,6 +248,64 @@ mod tests {
         let digest = SuitDigest::new(SuitDigestAlgorithm::Shake256, solution.into());
         let mut hasher = digest.hasher().unwrap();
         hasher.update(input);
+        assert_eq!(hasher.output_size(), solution.len());
         assert_eq!(digest.match_hasher(hasher), Ok(true));
+    }
+
+    #[test]
+    fn algo_mismatch() {
+        let input: &[u8] = &std::vec![];
+        let solution: &[u8] = &std::vec![
+            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
+            0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
+            0x78, 0x52, 0xb8, 0x55
+        ];
+        let mut digest = SuitDigest::new(SuitDigestAlgorithm::Sha256, solution.into());
+        let mut hasher = digest.hasher().unwrap();
+        hasher.update(input);
+        digest.algo = SuitDigestAlgorithm::Sha384; // Don't do this!
+        assert_eq!(
+            digest.match_hasher(hasher),
+            Err(Error::ConditionMatchFail(0))
+        );
+    }
+
+    #[test]
+    fn cbor_decode() {
+        let input: &[u8] = &std::vec![
+            0x82, 0x2F, 0x58, 0x20, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+            0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10
+        ];
+        let mut decoder = minicbor::Decoder::new(input);
+        let suit_digest = decoder.decode::<SuitDigest>().unwrap();
+        assert_eq!(suit_digest.algo, SuitDigestAlgorithm::Sha256);
+        let digest = suit_digest.digest;
+        let expected = std::vec![
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+            0xEE, 0xFF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98,
+            0x76, 0x54, 0x32, 0x10
+        ];
+        assert_eq!(**digest, *expected);
+
+        let mut buf = [0u8; 36];
+        let len = minicbor::len(&suit_digest);
+        minicbor::encode(&suit_digest, buf.as_mut()).unwrap();
+
+        assert_eq!(input, &buf[..len]);
+    }
+
+    #[test]
+    fn cbor_incorrect() {
+        // Incorrect array length
+        let input: &[u8] = &std::vec![
+            0x83, 0x2F, 0x58, 0x20, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+            0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10
+        ];
+        let mut decoder = minicbor::Decoder::new(input);
+        let suit_err = decoder.decode::<SuitDigest>().unwrap_err();
+        assert!(suit_err.is_type_mismatch());
+        assert_eq!(suit_err.position(), None);
     }
 }
