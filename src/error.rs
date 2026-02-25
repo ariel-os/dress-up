@@ -1,26 +1,52 @@
+//! SUIT parsing errors.
 use core::convert::From;
 
+/// SUIT manifest parsing errors
+///
+/// TODO! ensure error locations match the location within the manifest.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Error {
+    /// String Capacity exhausted.
     CapacityError,
+    /// SUIT Condition match failure.
+    ///
+    /// Returned when a SUIT command condition did not match the expected.
     ConditionMatchFail(usize),
+    /// SUIT Try Each command sequence failed every sequence.
     TryEachFail(usize),
+    /// Unexpected end of the CBOR input.
     EndOfInput,
+    /// Invalid command sequence.
     InvalidCommandSequence(usize),
+    /// Invalid common section.
     InvalidCommonSection,
+    /// No authentication object found inside the SUIT envelope.
     NoAuthObject,
+    /// No common section found inside the SUIT manifest.
     NoCommonSection,
+    /// Missing command section inside the SUIT manifest.
     NoCommandSection(i16),
+    /// No component list inside the SUIT common section
     NoComponentList,
+    /// No manifest object found inside the SUIT envelope.
     NoManifestObject,
+    /// Parameter required for the condition is not set.
     ParameterNotSet(usize),
+    /// CBOR element type at location is unexpected.
     UnexpectedCbor(usize),
+    /// CBOR array or map is of indefinite length where it is not allowed.
     UnexpectedIndefiniteLength(usize),
+    /// SUIT Command is not supported by the processor.
     UnsupportedCommand(i32),
+    /// SUIT component identifier is not supported by the processor.
     UnsupportedComponentIdentifier(i64),
+    /// SUIT digest algorithm is not supported by the processor.
     UnsupportedDigestAlgo(i64),
+    /// SUIT manifest version number is not supported by the processor.
     UnsupportedManifestVersion,
+    /// SUIT parameter is not supported by the processor.
     UnsupportedParameter(i32),
+    /// UTF-8 error while decoding the component identifier.
     Utf8Error(usize),
 }
 

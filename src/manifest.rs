@@ -1,3 +1,4 @@
+//! Inner SUIT manifest.
 use core::marker::PhantomData;
 
 use digest::Update;
@@ -12,10 +13,11 @@ use crate::consts::SuitCommand;
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
 use crate::report::ReportingPolicy;
-use crate::{Authenticated, OperatingHooks, State};
+use crate::{AuthState, Authenticated, OperatingHooks};
 
+/// Inner SUIT manifest.
 #[derive(Debug, Clone)]
-pub struct Manifest<'a, S: State> {
+pub struct Manifest<'a, S: AuthState> {
     decoder: Decoder<'a>,
     phantom: PhantomData<S>,
 }
@@ -42,8 +44,8 @@ impl<N: ArrayLength> RwBuf<N> {
     }
 }
 
-impl<'a, S: State> Manifest<'a, S> {
-    pub(crate) fn from_bytes<STATE: State>(bytes: &'a ByteSlice) -> Manifest<'a, STATE> {
+impl<'a, S: AuthState> Manifest<'a, S> {
+    pub(crate) fn from_bytes<STATE: AuthState>(bytes: &'a ByteSlice) -> Manifest<'a, STATE> {
         Manifest::<'a, STATE> {
             decoder: Decoder::new(bytes),
             phantom: PhantomData,
@@ -215,7 +217,7 @@ impl<'a> Manifest<'a, Authenticated> {
         component: &Component,
         os_hooks: &O,
     ) -> Result<(), Error> {
-        if let Some(digest) = state.image_digest {
+        if let Some(digest) = &state.image_digest {
             let size = os_hooks.component_size(component)?;
             let mut hasher = digest.hasher()?;
             let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;

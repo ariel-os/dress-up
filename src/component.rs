@@ -1,12 +1,19 @@
+//! Implements component handling in the SUIT manifest.
 use crate::error::Error;
 use heapless::string::String;
 use itertools::Itertools;
 use minicbor::bytes::ByteSlice;
 use minicbor::decode::{ArrayIter, Decode, Decoder};
 
+/// Represent the component index parameter in the SUIT manifest.
+///
+/// The parameter in a SUIT manifest can be set to a specific index, or by specifying 'true' as
+/// parameter, all components can be referenced.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum ComponentIndex {
+    /// Command sequence applies to all components.
     All,
+    /// Command sequence applies to only to the component with this index.
     Index(u32),
 }
 
@@ -16,6 +23,7 @@ impl ComponentIndex {
     }
 }
 
+/// Represents a single component in a manifest
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Component<'a> {
     cbor: &'a [u8],
@@ -40,6 +48,7 @@ impl<'a> Component<'a> {
         }
     }
 
+    /// Combine the component into a string.
     #[allow(unstable_name_collisions)]
     pub fn as_string<const N: usize>(
         &self,

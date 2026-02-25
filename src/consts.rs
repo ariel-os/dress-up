@@ -1,43 +1,88 @@
+//! SUIT IANA constants.
 use minicbor::data::Tag;
 
 pub const SUIT_TAG_ENVELOPE: Tag = Tag::new(107);
 pub const SUIT_SUPPORTED_VERSION: u8 = 1;
 
+/// Suit envelope elements
+///
+/// All elements are bstr wrapped.
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
 pub enum SuitEnvelope {
+    /// Unset detection
     Unset = 0,
+    /// Authentication wrapper
     Authentication = 2,
+    /// Manifest content
     Manifest = 3,
+    /// Payload fetch
+    ///
+    /// Used when the payload fetch stage is severable
     PayloadFetch = 16,
+    /// Payload installation
+    ///
+    /// Used when the payload installation stage is severable
     PayloadInstallation = 20,
-    PayloadText = 23,
+    /// Text description of the manifest
+    Text = 23,
 }
 
+/// Manifest elements
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
 pub enum Manifest {
+    /// Unset detection.
     Unset = 0,
+    /// Manifest encoding version number.
     EncodingVersion = 1,
+    /// Manifest sequence number.
+    ///
+    /// Monotonically increasing anti-rollback counter.
+    /// *May* be implemented as a timestamp.
     SequenceNumber = 2,
+    /// Encodes all information shared between command sequences.
     CommonData = 3,
+    /// URI where the full manifest can be found.
     ReferenceUri = 4,
+    /// SUIT command sequence to validate the result of applying the update is correct.
+    ///
+    /// Typical actions involve image validation.
     ImageValidation = 7,
+    /// SUIT command sequence to prepare a payload for execution.
+    ///
+    /// Typical actions include copying an image from permanent storage into RAM.
     ImageLoading = 8,
+    /// SUIT command sequence to invoke an image.
+    ///
+    /// typically only contains the [[SuitCommand::Invoke] action.
     ImageInvocation = 9,
+    /// SUIT command sequence to obtain a payload.
+    ///
+    /// Might be integrated into the [Manifest::PayloadInstallation] stage when the download
+    /// streams the payload into the installation location.
     PayloadFetch = 16,
+    /// SUIT command sequence to install a payload.
+    ///
+    /// Typical actions include verifying the payload in temporary storage, and copying the staged
+    /// payload from temporary storage.
     PayloadInstallation = 20,
+
     TextDescription = 23,
 }
 
+/// SUIT common section elements.
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i8)]
 pub enum SuitCommon {
+    /// Unset detection.
     Unset = 0,
+    /// List of component identifiers affected by this manifest.
     ComponentIdentifiers = 2,
+    /// SUIT command sequence to execute prior to executing any other command sequence.
     CommonCommandSequence = 4,
 }
 

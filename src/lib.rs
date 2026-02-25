@@ -2,6 +2,11 @@
 #![allow(dead_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+//! Dress-Up provides a parser-only implementation of the [SUIT][suit-rfc] manifest format,
+//! for `no_std` environments.
+//!
+//! 🚧 This crate is still under heavy construction 🚧
+
 use core::marker::PhantomData;
 
 use generic_array::ArrayLength;
@@ -22,33 +27,57 @@ use crate::consts::*;
 use crate::error::Error;
 use crate::manifest::Manifest;
 
-pub trait State {}
+/// Authentication state of the manifest
+pub trait AuthState {}
+/// Manifest is new.
 #[derive(Debug)]
 pub struct New;
+/// Manifest has been authenticated.
 #[derive(Debug)]
 pub struct Authenticated;
 
-impl State for New {}
-impl State for Authenticated {}
+impl AuthState for New {}
+impl AuthState for Authenticated {}
 
+/// Represent the full SUIT manifest.
+///
+/// The starting point of parsing a SUIT manifest
 #[derive(Clone)]
-pub struct SuitManifest<'a, S: State> {
+pub struct SuitManifest<'a, S: AuthState> {
     decoder: Decoder<'a>,
     phantom: PhantomData<S>,
 }
 
+/// SUIT envelope.
+///
+/// Processes the elements inside the SUIT envelope.
 #[derive(Clone)]
-pub struct EnvelopeDecoder<'a, S: State> {
+pub struct EnvelopeDecoder<'a, S: AuthState> {
     decoder: Decoder<'a>,
     phantom: PhantomData<S>,
 }
 
+/// A trait to expose operating system functionality to the SUIT manifest parsing
+///
+/// A SUIT manifest contains a set of check and directives to verify the applicability of the
+/// payload, retrieve the payload and install payload. Often this requires input from the operating
+/// system.
 pub trait OperatingHooks {
     type ReadWriteBufferSize: ArrayLength;
 
+    /// Match the vendor ID from the manifest.
+    ///
+    /// Installations without multiple components can ignore the `component` parameter.
     fn match_vendor_id(&self, uuid: Uuid, component: &component::Component) -> Result<bool, Error>;
+
+    /// Match the class ID from the manifest.
+    ///
+    /// Installations without multiple components can ignore the `component` parameter.
     fn match_class_id(&self, uuid: Uuid, component: &component::Component) -> Result<bool, Error>;
 
+    /// Match the device ID from the manifest.
+    ///
+    /// Installations without multiple components can ignore the `component` parameter.
     fn match_device_id(
         &self,
         _uuid: Uuid,
@@ -59,6 +88,10 @@ pub trait OperatingHooks {
         ))
     }
 
+    /// Verify that the component slot index of the supplied component is valid
+    ///
+    /// Some components can have multiple slots to install into. This condition allows the
+    /// to verify that the target slot is valid.
     fn match_component_slot(
         &self,
         _component: &component::Component,
@@ -69,6 +102,7 @@ pub trait OperatingHooks {
         ))
     }
 
+    /// Read the data from a component (with slot) into the supplied buffer.
     fn component_read(
         &self,
         component: &component::Component,
@@ -77,6 +111,7 @@ pub trait OperatingHooks {
         bytes: &mut [u8],
     ) -> Result<(), Error>;
 
+    /// Write the supplied data into the component (with slot).
     fn component_write(
         &self,
         component: &component::Component,
@@ -85,24 +120,14 @@ pub trait OperatingHooks {
         bytes: &[u8],
     ) -> Result<(), Error>;
 
+    /// Get the size of the component installed.
     fn component_size(&self, component: &component::Component) -> Result<usize, Error>;
 
+    /// Get the capacity of what can be installed in the component.
     fn component_capacity(&self, component: &component::Component) -> Result<usize, Error>;
 }
 
-impl<'a, S: State> SuitManifest<'a, S> {
-    fn decode(&mut self) -> Result<(), Error> {
-        let mut envelope_decoder = EnvelopeDecoder::from_manifest(self);
-        envelope_decoder.decode()?;
-        Ok(())
-    }
-
-    pub fn authenticate(self) -> Result<SuitManifest<'a, Authenticated>, Error> {
-        Ok(SuitManifest::<'a, Authenticated> {
-            decoder: self.decoder,
-            phantom: PhantomData,
-        })
-    }
+impl<'a, S: AuthState> SuitManifest<'a, S> {
     pub fn envelope(&self) -> Result<EnvelopeDecoder<'a, S>, Error> {
         let mut decoder = self.decoder.clone();
         let tag = decoder.tag()?;
@@ -123,21 +148,41 @@ impl<'a> SuitManifest<'a, New> {
             phantom: PhantomData,
         }
     }
+
+    pub fn authenticate<F>(self, authenticate: F) -> Result<SuitManifest<'a, Authenticated>, Error>
+    where
+        F: FnOnce(&[u8], &[u8]) -> Result<bool, Error>,
+    {
+        let envelope = self.envelope()?;
+        let auth_object = envelope.get_object(SuitEnvelope::Authentication)?;
+        let manifest = envelope.get_object(SuitEnvelope::Manifest)?;
+
+        match (auth_object, manifest) {
+            (None, _) => Err(Error::NoAuthObject),
+            (_, None) => Err(Error::NoManifestObject),
+            (Some(auth_object), Some(manifest)) => {
+                if authenticate(auth_object, manifest)? {
+                    Ok(SuitManifest::<Authenticated> {
+                        decoder: self.decoder,
+                        phantom: PhantomData,
+                    })
+                } else {
+                    Err(Error::NoAuthObject)
+                }
+            }
+        }
+    }
 }
 
 impl<'a> SuitManifest<'a, Authenticated> {}
 
-impl<'a, S: State> EnvelopeDecoder<'a, S> {
+impl<'a, S: AuthState> EnvelopeDecoder<'a, S> {
     fn from_manifest(manifest: &SuitManifest<'a, S>) -> Self {
         let decoder = manifest.decoder.clone();
         Self {
             decoder,
             phantom: PhantomData,
         }
-    }
-
-    pub fn decode(&mut self) -> Result<(), Error> {
-        Ok(())
     }
 
     fn get_object(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {

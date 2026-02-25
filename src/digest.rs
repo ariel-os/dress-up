@@ -1,8 +1,13 @@
-use minicbor::{bytes::ByteSlice, data::Type, encode::Write, Decode, Encode, Encoder};
+//! SUIT digests.
+use minicbor::{bytes::ByteSlice, data::Type, encode::Write, CborLen, Decode, Encode, Encoder};
 
 use crate::error::Error;
 use digest::{ExtendableOutput, FixedOutput, OutputSizeUser, Update};
 
+/// SUIT digest algorithm numbers.
+///
+/// Contains digest algorithm numbers from the COSE algorithm registry.
+/// See <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
 #[derive(Copy, Clone, Debug, PartialEq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
 #[num_enum(error_type(name = Error, constructor = Error::digest_algo_error))]
 #[non_exhaustive]
@@ -21,7 +26,8 @@ pub struct SuitDigest<'a> {
     digest: &'a ByteSlice,
 }
 
-pub enum Hasher {
+#[derive(Clone, Debug)]
+pub(crate) enum Hasher {
     Sha2(sha2::Sha256),
     Sha384(sha2::Sha384),
     Sha512(sha2::Sha512),
@@ -30,15 +36,15 @@ pub enum Hasher {
 }
 
 impl<'a> SuitDigest<'a> {
-    pub fn new(algo: SuitDigestAlgorithm, digest: &'a ByteSlice) -> Self {
+    pub(crate) fn new(algo: SuitDigestAlgorithm, digest: &'a ByteSlice) -> Self {
         Self { algo, digest }
     }
 
-    pub fn hasher(&self) -> Result<Hasher, Error> {
+    pub(crate) fn hasher(&self) -> Result<Hasher, Error> {
         Hasher::new(self.algo)
     }
 
-    pub fn match_hasher(&self, hasher: Hasher) -> Result<bool, Error> {
+    pub(crate) fn match_hasher(&self, hasher: Hasher) -> Result<bool, Error> {
         match (self.algo, hasher) {
             (SuitDigestAlgorithm::Sha256, Hasher::Sha2(digest)) => {
                 let output = digest.finalize_fixed();
@@ -96,6 +102,13 @@ impl<C> Encode<C> for SuitDigest<'_> {
         algo.encode(e, ctx)?;
         self.digest.encode(e, ctx)?;
         Ok(())
+    }
+}
+
+impl<C> CborLen<C> for SuitDigest<'_> {
+    fn cbor_len(&self, ctx: &mut C) -> usize {
+        let algo: i64 = self.algo.into();
+        algo.cbor_len(ctx) + self.digest.cbor_len(ctx) + 1
     }
 }
 

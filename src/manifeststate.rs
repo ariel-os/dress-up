@@ -1,3 +1,4 @@
+//! Manifest runtime parameter state.
 use crate::component::Component;
 use crate::consts::SuitParameter;
 use crate::digest::SuitDigest;
@@ -6,8 +7,13 @@ use minicbor::bytes::{ByteArray, ByteSlice};
 use minicbor::decode::{Decode, Decoder};
 use uuid::Uuid;
 
+/// Contains the configured manifest parameters.
+///
+/// Contains all information to track parameters set in the manifest.
+/// See also
+/// <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit_parameters>
 #[derive(Default, Clone, Debug, PartialEq)]
-pub struct ManifestState<'a> {
+pub(crate) struct ManifestState<'a> {
     pub(crate) component_index: Option<Component<'a>>,
     pub(crate) content: Option<&'a ByteSlice>,
     pub(crate) vendor_id: Option<Uuid>,

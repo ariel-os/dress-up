@@ -1,3 +1,4 @@
+//! SUIT report handling and generation
 use minicbor::Decode;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
