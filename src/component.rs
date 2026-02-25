@@ -34,10 +34,9 @@ impl<'a, C> Decode<'a, C> for Component<'a> {
 }
 
 impl<'a> Component<'a> {
-
-    pub fn from_bytes(bytes: &'a [u8]) ->Component<'a> {
+    pub fn from_bytes(bytes: &'a impl AsRef<[u8]>) -> Component<'a> {
         Component {
-            cbor: bytes
+            cbor: bytes.as_ref(),
         }
     }
 
