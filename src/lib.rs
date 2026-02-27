@@ -231,3 +231,73 @@ impl<'a, S: AuthState> EnvelopeDecoder<'a, S> {
         Ok(Manifest::<S>::from_bytes(manifest_bytes))
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    extern crate std;
+
+    use cose::{keys::CoseKey, message::CoseMessage};
+
+    fn build_key(pub_key: std::vec::Vec<u8>) -> CoseKey {
+        // Parse EC public key into coordinates
+        let pub_key = openssl::ec::EcKey::public_key_from_pem(&pub_key).unwrap();
+        let coordinates = pub_key.public_key();
+        let group = pub_key.group();
+        let mut x = openssl::bn::BigNum::new().unwrap();
+        let mut y = openssl::bn::BigNum::new().unwrap();
+        let mut ctx = openssl::bn::BigNumContext::new().unwrap();
+        coordinates
+            .affine_coordinates_gfp(&group, &mut x, &mut y, &mut ctx)
+            .unwrap();
+
+        let mut key = CoseKey::new();
+        key.kty(cose::keys::EC2);
+        key.alg(cose::algs::ES256);
+        key.crv(cose::keys::P_256);
+        key.x(x.to_vec());
+        key.y(y.to_vec());
+        key.key_ops(std::vec![cose::keys::KEY_OPS_VERIFY]);
+        key
+    }
+
+    #[test]
+    fn test_verify() {
+        const PUB_KEY: &str = "
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhJaBGq4LqqvSYVcYnuzaJr6qi/Eb
+bz/m4rVlnIXbwK07HypLbAmBMcCjbazR14vTgdzfsJwFLbM5kdtzOLSolg==
+-----END PUBLIC KEY-----
+";
+
+        let manifest = hex::decode(
+            "d86ba2025873825824822f58206658ea560262696dd1f13b782239a064da\
+             7c6c5cbaf52fded428a6fc83c7e5af584ad28443a10126a0f65840408d08\
+             16f9b510749bf6a51b066951e08a4438f849eb092a1ac768eed9de696c1b\
+             1dd35d82ef149e6a73a61976ad2cfe78444b8064293350a122f332cb49f0\
+             da035871a50101020003585fa202818141000458568614a40150fa6b4a53\
+             d5ad5fdfbe9de663e4d41ffe02501492af1425695e48bf429b2d51f2ab45\
+             035824822f582000112233445566778899aabbccddeeff0123456789abcd\
+             effedcba98765432100e1987d0010f020f074382030f0943821702",
+        )
+        .unwrap();
+
+        let manifest = SuitManifest::from_bytes(&manifest);
+        let key = build_key(std::vec::Vec::from(PUB_KEY));
+        let _ = manifest
+            .authenticate(|cose, payload| {
+                let mut verify = CoseMessage::new_sign();
+                verify.bytes = cose.to_vec();
+                verify
+                    .init_decoder(Some(payload.to_vec()))
+                    .map_err(|_| Error::AuthenticationFailure)?;
+                verify.key(&key).map_err(|_| Error::AuthenticationFailure)?;
+                verify
+                    .decode(None, None)
+                    .map_err(|_| Error::AuthenticationFailure)?;
+                Ok(true)
+            })
+            .unwrap();
+    }
+}
