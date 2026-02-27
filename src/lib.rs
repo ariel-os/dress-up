@@ -153,24 +153,23 @@ impl<'a> SuitManifest<'a, New> {
 
     pub fn authenticate<F>(self, authenticate: F) -> Result<SuitManifest<'a, Authenticated>, Error>
     where
-        F: FnOnce(&[u8], &[u8]) -> Result<bool, Error>,
+        F: Fn(&[u8], &[u8]) -> Result<bool, Error>,
     {
         let envelope = self.envelope()?;
+        // Consists of a bstr wrapped digest + *bstr wrapped auth blocks
+        let manifest = envelope.get_object_wrapped(SuitEnvelope::Manifest)?;
         let auth_object = envelope.get_object(SuitEnvelope::Authentication)?;
-        let manifest = envelope.get_object(SuitEnvelope::Manifest)?;
 
         match (auth_object, manifest) {
             (None, _) => Err(Error::NoAuthObject),
             (_, None) => Err(Error::NoManifestObject),
             (Some(auth_object), Some(manifest)) => {
-                if authenticate(auth_object, manifest)? {
-                    Ok(SuitManifest::<Authenticated> {
-                        decoder: self.decoder,
-                        phantom: PhantomData,
-                    })
-                } else {
-                    Err(Error::NoAuthObject)
-                }
+                let auth_object = Authentication::new(auth_object, manifest)?;
+                auth_object.authenticate(authenticate)?;
+                Ok(SuitManifest::<Authenticated> {
+                    decoder: self.decoder,
+                    phantom: PhantomData,
+                })
             }
         }
     }
@@ -195,6 +194,26 @@ impl<'a, S: AuthState> EnvelopeDecoder<'a, S> {
                 Ok((key, item)) if key == search_key.into() => Some(item),
                 _ => None,
             }))
+    }
+
+    fn get_object_wrapped(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
+        let mut decoder = self.decoder.clone();
+        let len = decoder
+            .map()?
+            .ok_or(Error::UnexpectedCbor(decoder.position()))?;
+        for _ in 0..len {
+            let key = decoder.i16()?;
+            let start = decoder.position();
+            decoder.skip()?;
+            if key == search_key.into() {
+                let end = decoder.position();
+                if let Some(buffer) = decoder.input().get(start..end) {
+                    return Ok(Some(buffer.into()));
+                }
+                return Err(Error::UnexpectedCbor(decoder.position()));
+            }
+        }
+        Ok(None)
     }
 
     pub fn auth_object(&self) -> Result<&'a ByteSlice, Error> {
