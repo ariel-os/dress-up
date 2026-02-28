@@ -127,6 +127,16 @@ pub trait OperatingHooks {
 
     /// Get the capacity of what can be installed in the component.
     fn component_capacity(&self, component: &component::Component) -> Result<usize, Error>;
+
+    /// Retrieve the payload from the url and store it in the component.
+    fn fetch(
+        &self,
+        _component: &component::Component,
+        _slot: Option<u64>,
+        _uri: &str,
+    ) -> Result<(), Error> {
+        Err(Error::UnsupportedCommand(SuitCommand::Fetch.into()))
+    }
 }
 
 impl<'a, S: AuthState> SuitManifest<'a, S> {
