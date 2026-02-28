@@ -113,13 +113,20 @@ impl<'a> Manifest<'a, Authenticated> {
         let mut decoder = Decoder::new(common);
         let mut components = None;
         let mut commands = None;
-        let iter = decoder.map_iter()?;
-        for item in iter {
-            match item {
-                Ok((2, value)) => components = Some(value), // components
-                Ok((4, value)) => commands = Some(value),
-                Err(err) => return Err(err.into()),
-                Ok((_, _)) => (), // TODO add break
+        let len = decoder.map()?.ok_or(Error::InvalidCommonSection)?;
+        for _ in 0..len {
+            let key = decoder.i16()?;
+            match key {
+                2 => {
+                    let start = decoder.position();
+                    decoder.skip()?; // Skip over the full component section
+                    let end = decoder.position();
+                    components = decoder.input().get(start..end).map(|c| c.into());
+                }
+                4 => {
+                    commands = Some(decoder.bytes()?.into());
+                }
+                _ => return Err(Error::InvalidCommonSection),
             }
         }
         if let (Some(components), Some(commands)) = (components, commands) {
