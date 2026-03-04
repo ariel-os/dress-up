@@ -259,7 +259,7 @@ mod tests {
         let mut y = openssl::bn::BigNum::new().unwrap();
         let mut ctx = openssl::bn::BigNumContext::new().unwrap();
         coordinates
-            .affine_coordinates_gfp(&group, &mut x, &mut y, &mut ctx)
+            .affine_coordinates_gfp(group, &mut x, &mut y, &mut ctx)
             .unwrap();
 
         let mut key = CoseKey::new();
