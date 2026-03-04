@@ -1,5 +1,4 @@
 //! Manifest runtime parameter state.
-use crate::component::Component;
 use crate::consts::SuitParameter;
 use crate::digest::SuitDigest;
 use crate::error::Error;
@@ -14,7 +13,6 @@ use uuid::Uuid;
 /// <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit_parameters>
 #[derive(Default, Clone, Debug, PartialEq)]
 pub(crate) struct ManifestState<'a> {
-    pub(crate) component_index: Option<Component<'a>>,
     pub(crate) content: Option<&'a ByteSlice>,
     pub(crate) vendor_id: Option<Uuid>,
     pub(crate) class_id: Option<Uuid>,
@@ -26,10 +24,6 @@ pub(crate) struct ManifestState<'a> {
 }
 
 impl<'a> ManifestState<'a> {
-    pub(crate) fn set_component_index(&mut self, component: Component<'a>) {
-        self.component_index = Some(component);
-    }
-
     pub(crate) fn set_content(&mut self, content: &'a ByteSlice) {
         self.content = Some(content);
     }
