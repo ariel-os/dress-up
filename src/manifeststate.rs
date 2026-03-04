@@ -68,7 +68,7 @@ impl<'a> ManifestState<'a> {
     pub(crate) fn device_id_from_cbor(&mut self, decoder: &mut Decoder) -> Result<(), Error> {
         let uuid: ByteArray<16> = ByteArray::decode(decoder, &mut ())?;
         let uuid = Uuid::from_bytes(*uuid);
-        self.set_vendor_id(uuid);
+        self.set_device_id(uuid);
         Ok(())
     }
 
@@ -190,6 +190,19 @@ mod tests {
         let mut decoder = Decoder::new(&input);
         params.update_parameter(&mut decoder).unwrap();
         assert_eq!(params.class_id.unwrap(), uuid);
+    }
+
+    #[test]
+    fn device_id() {
+        let input = std::vec![
+            0xA1, 0x18, 0x18, 0x50, 0xE3, 0xFB, 0xD0, 0x35, 0xB7, 0xB9, 0x40, 0x1F, 0xB3, 0x7C,
+            0x03, 0x0E, 0x0B, 0x95, 0x48, 0x1F
+        ];
+        let uuid = Uuid::parse_str("e3fbd035-b7b9-401f-b37c-030e0b95481f").unwrap();
+        let mut params = ManifestState::default();
+        let mut decoder = Decoder::new(&input);
+        params.update_parameter(&mut decoder).unwrap();
+        assert_eq!(params.device_id.unwrap(), uuid);
     }
 
     #[test]
