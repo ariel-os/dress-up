@@ -406,6 +406,75 @@ mod tests {
         }
     }
 
+    fn test_vendor_uuid() -> Uuid {
+        uuid!("fa6b4a53-d5ad-5fdf-be9d-e663e4d41ffe")
+    }
+
+    fn test_class_uuid() -> Uuid {
+        uuid!("1492af14-2569-5e48-bf42-9b2d51f2ab45")
+    }
+
+    fn create_test_hooks() -> TestHooks {
+        let vendor = test_vendor_uuid();
+        let class = test_class_uuid();
+        TestHooks::new(class, vendor)
+    }
+
+    const COMPONENT_NAME: [u8; 3] = [0x81, 0x41, 0x00];
+
+    fn create_test_component() -> ComponentInfo<'static> {
+        let component = Component::from_bytes(&COMPONENT_NAME);
+        ComponentInfo::new(component, 0)
+    }
+
+    #[test]
+    fn invalid_sequence() {
+        let input: &[u8] = &std::vec![0x83, 0x14, 0x05, 0x15,];
+
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let state = ManifestState::default();
+        let res = sequence.process(state, &info).unwrap_err();
+        assert_eq!(res, Error::InvalidCommandSequence(1));
+    }
+
+    #[test]
+    fn indefinite_length_sequence() {
+        let input: &[u8] = &std::vec![0x9F, 0x14, 0x05, 0xFF];
+
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let state = ManifestState::default();
+        let res = sequence.process(state, &info).unwrap_err();
+        assert_eq!(res, Error::InvalidCommandSequence(1));
+    }
+
+    #[test]
+    fn unset_detection() {
+        let input: &[u8] = &std::vec![0x82, 0x00, 0x05];
+
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let state = ManifestState::default();
+        let res = sequence.process(state.clone(), &info).unwrap_err();
+        assert_eq!(res, Error::UnsupportedCommand(0));
+    }
+
+    #[test]
+    fn component_switch() {
+        let input: &[u8] = &std::vec![0x86, 0x0C, 0x01, 0x14, 0xA1, 0x05, 0x01, 0x0C, 0x00];
+        let state = ManifestState::default();
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+
+        let res = sequence.process(state, &info).unwrap();
+        assert_eq!(res.component_slot, None);
+    }
+
     #[test]
     fn simple_sequence() {
         let input: &[u8] = &std::vec![
@@ -417,15 +486,11 @@ mod tests {
             0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10, 0x0E, 0x19, 0x87, 0xD0, 0x01, 0x0F,
             0x02, 0x0F
         ];
-        let vendor = uuid!("fa6b4a53-d5ad-5fdf-be9d-e663e4d41ffe");
-        let class = uuid!("1492af14-2569-5e48-bf42-9b2d51f2ab45");
-        let hooks = TestHooks::new(class, vendor);
 
+        let hooks = create_test_hooks();
         let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
-        let component_name = &std::vec![0x81, 0x41, 0x00];
-        let component = Component::from_bytes(component_name);
-        let info = ComponentInfo::new(component, 0);
         let mut state = ManifestState::default();
+        let info = create_test_component();
 
         let res = sequence.process(state.clone(), &info);
 
@@ -435,8 +500,8 @@ mod tests {
             0x76, 0x54, 0x32, 0x10
         ];
         let digest = SuitDigest::new(SuitDigestAlgorithm::Sha256, digest_bytes.into());
-        state.set_vendor_id(vendor);
-        state.set_class_id(class);
+        state.set_vendor_id(test_vendor_uuid());
+        state.set_class_id(test_class_uuid());
         state.set_image_digest(digest);
         state.set_image_size(34768);
 
@@ -454,13 +519,9 @@ mod tests {
             0x5D, 0xC1, 0x51, 0x89, 0x23, 0xAE, 0x8B, 0x0E, 0x0E, 0x19, 0x87, 0xD0, 0x12, 0x44,
             0x74, 0xBA, 0x25, 0x21, 0x01, 0x0F, 0x02, 0x0F, 0x12, 0x0F, 0x03, 0x0F, 0x06, 0x0F,
         ];
-        let component_name = &std::vec![0x81, 0x41, 0x00];
-        let component = Component::from_bytes(component_name);
-        let info = ComponentInfo::new(component, 0);
         let state = ManifestState::default();
-        let vendor = uuid!("fa6b4a53-d5ad-5fdf-be9d-e663e4d41ffe");
-        let class = uuid!("1492af14-2569-5e48-bf42-9b2d51f2ab45");
-        let hooks = TestHooks::new(class, vendor);
+        let hooks = create_test_hooks();
+        let info = create_test_component();
 
         let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
         let res = sequence.process(state.clone(), &info);
@@ -474,16 +535,36 @@ mod tests {
             0x82, 0x0F, 0x82, 0x47, 0x84, 0x0E, 0x05, 0x14, 0xA1, 0x05, 0x01, 0x45, 0x82, 0x14,
             0xA1, 0x05, 0x02
         ];
-        let vendor = uuid!("fa6b4a53-d5ad-5fdf-be9d-e663e4d41ffe");
-        let class = uuid!("1492af14-2569-5e48-bf42-9b2d51f2ab45");
-        let hooks = TestHooks::new(class, vendor);
-        let component_name = &std::vec![0x81, 0x41, 0x00];
-        let component = Component::from_bytes(component_name);
-        let info = ComponentInfo::new(component, 0);
+        let hooks = create_test_hooks();
+        let info = create_test_component();
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
         let res = sequence.process(state.clone(), &info).unwrap();
         assert_eq!(res.component_slot, Some(2));
+    }
+
+    #[test]
+    fn try_each_fail() {
+        let input: &[u8] = &std::vec![0x82, 0x0F, 0x81, 0x43, 0x82, 0x0E, 0x05];
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+
+        let state = ManifestState::default();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let res = sequence.process(state.clone(), &info).unwrap_err();
+        assert_eq!(res, Error::TryEachFail(7));
+    }
+
+    #[test]
+    fn try_each_empty() {
+        let input: &[u8] = &std::vec![0x82, 0x0F, 0x81, 0x40];
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+
+        let state = ManifestState::default();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let res = sequence.process(state.clone(), &info);
+        assert_eq!(res, Ok(state));
     }
 }
