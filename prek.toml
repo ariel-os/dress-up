@@ -17,12 +17,12 @@ hooks = [
 repo = "local"
 hooks = [
   { id = "taplo", name = "taplo", language = "system", entry = "taplo fmt", files = "\\.toml$" },
-  { id = "cargo fmt", name = "cargo fmt", language = "system", entry = "cargo fmt", args = [
+  { id = "cargo fmt", name = "cargo fmt", language = "system", pass_filenames = false, entry = "cargo fmt", args = [
     "--check",
     "--all",
     "--",
     "--config",
     "format_generated_files=false",
   ], files = "\\.rs$" },
-  { id = "cargo test", name = "cargo test", language = "system", entry = "cargo test", files = "\\.rs$" },
+  { id = "cargo test", name = "cargo test", language = "system", pass_filenames = false, entry = "cargo test", files = "\\.rs$" },
 ]
