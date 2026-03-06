@@ -14,7 +14,7 @@ use crate::report::ReportingPolicy;
 use crate::OperatingHooks;
 
 #[derive(Clone, Debug)]
-enum CommandArgument<'a> {
+pub(crate) enum CommandArgument<'a> {
     Report(ReportingPolicy),
     Cbor(Decoder<'a>),
 }
@@ -32,10 +32,10 @@ impl<'a> CommandArgument<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct Command<'a> {
-    command: SuitCommand,
-    argument: CommandArgument<'a>,
-    position: usize,
+pub(crate) struct Command<'a> {
+    pub(crate) command: SuitCommand,
+    pub(crate) argument: CommandArgument<'a>,
+    pub(crate) position: usize,
 }
 
 impl<'a> Command<'a> {
@@ -54,13 +54,13 @@ impl<'a> Command<'a> {
     }
 }
 
-struct CommandSequenceIterator<'a> {
+pub(crate) struct CommandSequenceIterator<'a> {
     d: Decoder<'a>,
     remaining: u64,
 }
 
 impl<'a> CommandSequenceIterator<'a> {
-    pub fn new(mut d: Decoder<'a>) -> Result<Self, Error> {
+    pub(crate) fn new(mut d: Decoder<'a>) -> Result<Self, Error> {
         let length = Self::enter_sequence(&mut d)?;
         Ok(CommandSequenceIterator {
             d,
