@@ -202,3 +202,28 @@ impl From<SuitCommand> for i32 {
         }
     }
 }
+
+impl SuitCommand {
+    pub(crate) fn has_report_policy(&self) -> bool {
+        match self {
+            SuitCommand::Unset => false,
+            SuitCommand::VendorIdentifier => true,
+            SuitCommand::ClassIdentifier => true,
+            SuitCommand::ImageMatch => true,
+            SuitCommand::ComponentSlot => true,
+            SuitCommand::CheckContent => true,
+            SuitCommand::SetComponentIndex => false,
+            SuitCommand::Abort => true,
+            SuitCommand::TryEach => false,
+            SuitCommand::WriteContent => true,
+            SuitCommand::OverrideParameters => false,
+            SuitCommand::Fetch => true,
+            SuitCommand::Copy => true,
+            SuitCommand::Invoke => true,
+            SuitCommand::DeviceIdentifier => true,
+            SuitCommand::Swap => true,
+            SuitCommand::RunSequence => false,
+            SuitCommand::Custom(_) => false,
+        }
+    }
+}
