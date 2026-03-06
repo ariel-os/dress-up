@@ -156,6 +156,7 @@ pub enum SuitCommand {
 impl From<i32> for SuitCommand {
     fn from(value: i32) -> Self {
         match value {
+            0 => SuitCommand::Unset,
             1 => SuitCommand::VendorIdentifier,
             2 => SuitCommand::ClassIdentifier,
             3 => SuitCommand::ImageMatch,
