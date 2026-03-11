@@ -22,3 +22,4 @@ uuid = { version = "1.18.1", default-features = false }
 cose-rust = "0.1.8"
 openssl = "0.10.75"
 hex = "0.4.3"
+cbor-edn = { version = "0.0.9", default-features = false }
