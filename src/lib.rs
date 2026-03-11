@@ -128,7 +128,7 @@ pub struct SuitManifest<'a, S: AuthState> {
 ///
 /// Processes the elements inside the SUIT envelope.
 #[derive(Clone)]
-pub struct EnvelopeDecoder<'a, S: AuthState> {
+pub struct Envelope<'a, S: AuthState> {
     decoder: Decoder<'a>,
     phantom: PhantomData<S>,
 }
@@ -219,13 +219,13 @@ pub trait OperatingHooks {
 }
 
 impl<'a, S: AuthState> SuitManifest<'a, S> {
-    pub fn envelope(&self) -> Result<EnvelopeDecoder<'a, S>, Error> {
+    pub fn envelope(&self) -> Result<Envelope<'a, S>, Error> {
         let mut decoder = self.decoder.clone();
         let tag = decoder.tag()?;
         if tag != SUIT_TAG_ENVELOPE {
             return Err(Error::UnexpectedCbor(self.decoder.position()));
         }
-        Ok(EnvelopeDecoder {
+        Ok(Envelope {
             decoder,
             phantom: PhantomData,
         })
@@ -266,7 +266,7 @@ impl<'a> SuitManifest<'a, New> {
 
 impl<'a> SuitManifest<'a, Authenticated> {}
 
-impl<'a, S: AuthState> EnvelopeDecoder<'a, S> {
+impl<'a, S: AuthState> Envelope<'a, S> {
     fn from_manifest(manifest: &SuitManifest<'a, S>) -> Self {
         let decoder = manifest.decoder.clone();
         Self {
