@@ -9,6 +9,14 @@
 //!
 //! ## Overview
 //!
+//! This section gives a brief overview of the primary types in this crate.
+//!
+//! - [`SuitManifest`]: This starts the SUIT manifest parsing. Contains the functions required to
+//! check manifest validity. The [`Envelope`] structure derives from this.
+//! - [`Envelope`]: Describes the SUIT Envelope structure. The Envelope contains both the
+//! authentication object and the manifest itself.
+//! - [`manifest::Manifest`]: Contains the inner SUIT manifest.
+//!
 //! ## Example
 //!
 //! ```
@@ -78,6 +86,7 @@
 //!let cbor = StandaloneItem::parse(input).unwrap().to_cbor().unwrap();
 //!let suit = SuitManifest::from_bytes(&cbor);
 //! ```
+//! [suit-rfc]: https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34
 use core::marker::PhantomData;
 
 use generic_array::ArrayLength;
