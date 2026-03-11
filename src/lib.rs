@@ -3,19 +3,32 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 //! Dress-Up provides a parser-only implementation of the [SUIT][suit-rfc] manifest format,
-//! for `no_std` environments.
+//! for `no_std` environments. Dress-Up relies on [minicbor] for CBOR parsing.
+//! Dress-Up parses CBOR on the fly during manifest execution and is zero-copy.
 //!
 //! 🚧 This crate is still under heavy construction 🚧
+//!
+//! The full manifest must be in memory during parsing. The authentication object covers the inner
+//! manifest. Both must be in for authentication. The other reason is that Dress-Up is zero-copy.
+//! All text and byte strings are references into the CBOR data.
+//!
+//! A typical flow with Dress-Up consists of multiple steps:
+//! 1. Start the parsing by creating a [`SuitManifest`].
+//! 2. Authenticate the manifest via [`SuitManifest::authenticate`].
+//! 3. Derive the [`Envelope`] from the [`SuitManifest`] via [`SuitManifest::envelope`].
+//! 4. Deriver the inner [`Manifest`] from the [`Envelope`] via [`Envelope::manifest`].
+//! 5. check the existence of different command sequences and execute them when available.
 //!
 //! ## Overview
 //!
 //! This section gives a brief overview of the primary types in this crate.
 //!
 //! - [`SuitManifest`]: This starts the SUIT manifest parsing. Contains the functions required to
-//! check manifest validity. The [`Envelope`] structure derives from this.
+//!   check manifest validity. The [`Envelope`] structure derives from this.
 //! - [`Envelope`]: Describes the SUIT Envelope structure. The Envelope contains both the
-//! authentication object and the manifest itself.
-//! - [`manifest::Manifest`]: Contains the inner SUIT manifest.
+//!   authentication object and the manifest itself.
+//! - [`manifest::Manifest`]: Contains the inner SUIT manifest. It provides access to the command
+//!   sequences in the manifest.
 //!
 //! ## Example
 //!
