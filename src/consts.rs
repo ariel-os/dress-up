@@ -1,12 +1,16 @@
 //! SUIT IANA constants.
 use minicbor::data::Tag;
 
+/// SUIT envelope tag.
 pub const SUIT_TAG_ENVELOPE: Tag = Tag::new(107);
+/// SUIT manifest encoding version support.
 pub const SUIT_SUPPORTED_VERSION: u8 = 1;
 
 /// Suit envelope elements
 ///
 /// All elements are bstr wrapped.
+///
+/// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-envelope-elements>
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
@@ -30,6 +34,8 @@ pub enum SuitEnvelope {
 }
 
 /// Manifest elements
+///
+/// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-manifest-elements>
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
@@ -70,10 +76,13 @@ pub enum Manifest {
     /// payload from temporary storage.
     PayloadInstallation = 20,
 
+    /// SUIT text description in the manifest.
     TextDescription = 23,
 }
 
 /// SUIT common section elements.
+///
+/// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-common-elements>
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
@@ -86,22 +95,55 @@ pub enum SuitCommon {
     CommonCommandSequence = 4,
 }
 
+/// SUIT parameter numbers.
+///
+/// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-parameters>
 #[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
 #[non_exhaustive]
 #[repr(i32)]
 pub enum SuitParameter {
+    /// Unset detection.
     Unset = 0,
+    /// Vendor identifier.
+    ///
+    /// Contains an UUID encoded as byte string.
+    /// Argument for [`SuitCommand::VendorIdentifier`].
     VendorId = 1,
+    /// Class Identifier.
+    ///
+    /// Contains an UUID encoded as byte string.
+    /// Argument for [`SuitCommand::ClassIdentifier`].
     ClassId = 2,
+    /// Digest of a component.
+    ///
+    /// Contains an suit_digest structure.
+    /// Argument for [`SuitCommand::ImageMatch`].
+    // Decodes into a [`crate::digest::SuitDigest`].
     ImageDigest = 3,
+    /// Specify a slot within a slot.
     ComponentSlot = 5,
+    /// Strict order execution of the current command sequence.
     StrictOrder = 12,
+    /// Soft failure execution of the current command sequence.
     SoftFailure = 13,
+    /// Component payload image size in bytes.
     ImageSize = 14,
+    /// Direct content for a component.
+    ///
+    /// Encodes a payload as direct byte string in the parameter.
+    /// Argument for [`SuitCommand::WriteContent`].
     Content = 18,
+    /// URI for a fetch command.
+    /// Argument for [`SuitCommand::Fetch`].
     Uri = 21,
+    /// Source component for copy and swap commands.
+    /// Argument for [`SuitCommand::Copy`] and [`SuitCommand::Swap`].
     SourceComponent = 22,
+    /// Arguments for the invoke command.
+    /// Argument for [`SuitCommand::Invoke`].
     InvokeArgs = 23,
+    /// Device Identifier, contains an UUID encoded as byte string.
+    /// Argument for [`SuitCommand::DeviceIdentifier`].
     DeviceId = 24,
 }
 
@@ -129,27 +171,57 @@ impl TryFrom<i32> for SuitParameter {
     }
 }
 
+/// SUIT command numbers
+///
+/// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-commands>
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[non_exhaustive]
 #[repr(i32)]
 pub enum SuitCommand {
+    /// Unset detection.
     Unset = 0,
+    /// Check the supplied vendor identifier in [`SuitParameter::VendorId`] with the vendor identifier stored on the device.
     VendorIdentifier = 1,
+    /// Check the supplied device class identifier in [`SuitParameter::ClassId`] with the device class identifier stored on the device.
     ClassIdentifier = 2,
+    /// Verify the content in the component based on the digest.
     ImageMatch = 3,
+    /// Verify if the component slot is valid for the current component.
     ComponentSlot = 5,
+    /// Check the content in the component based on the [`SuitParameter::Content`].
     CheckContent = 6,
+    /// Set the component index for the next commands in the sequence.
     SetComponentIndex = 12,
+    /// Abort the manifest processing.
     Abort = 14,
+    /// Sequentially execute a set of command sequences until one succeeds.
     TryEach = 15,
+    /// Write the content of the [`SuitParameter::Content`] in the current component.
     WriteContent = 18,
+    /// Set or override a set of parameters.
+    ///
+    /// See [`SuitParameter`] for supported parameters.
     OverrideParameters = 20,
+    /// Fetch a payload from [`SuitParameter::Uri`] into the current component.
     Fetch = 21,
+    /// Copy a payload from [`SuitParameter::SourceComponent`] into the current component.
     Copy = 22,
+    /// Invoke the current component.
+    ///
+    /// Stops manifest processing to start execution of the component.
     Invoke = 23,
+    /// Check the supplied vendor identifier in [`SuitParameter::VendorId`] with the vendor identifier stored on the device.
     DeviceIdentifier = 24,
+    /// Swap the content of two components.
+    ///
+    /// Uses the current component index and the source component in [`SuitParameter::SourceComponent`] for the swap.
     Swap = 31,
+    /// Run a sequence of commands.
     RunSequence = 32,
+    /// Run a custom, application specific command.
+    ///
+    /// The processort passes the command to the [`crate::OperatingHooks`] for the operating system to process the
+    /// command.
     Custom(i32),
 }
 
