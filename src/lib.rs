@@ -92,6 +92,9 @@
 //!   authentication object and the manifest itself.
 //! - [`manifest::Manifest`]: Contains the inner SUIT manifest. It provides access to the command
 //!   sequences in the manifest.
+//! - [`OperatingHooks`]: This trait provides the interface to the operating system functions
+//!   required by Dress-Up. The operating system or application running Dress-Up must provide an
+//!   implementation.
 //!
 //! ## Example
 //!
@@ -193,7 +196,7 @@ pub trait AuthState {}
 /// Manifest is new.
 #[derive(Debug)]
 pub struct New;
-/// Manifest has been authenticated.
+/// Manifest is authenticated.
 #[derive(Debug)]
 pub struct Authenticated;
 
@@ -224,6 +227,11 @@ pub struct Envelope<'a, S: AuthState> {
 /// payload, retrieve the payload and install payload. Often this requires input from the operating
 /// system.
 pub trait OperatingHooks {
+    /// The size of the intermediate buffer used during reads and writes with components.
+    ///
+    /// This determines the size of a stack-allocated buffer used. Conditions execution write in
+    /// this buffer when content from a component is required for the condition. The Digest
+    /// and the Content check use this buffer.
     type ReadWriteBufferSize: ArrayLength;
 
     /// Match the vendor ID from the manifest.
@@ -287,7 +295,7 @@ pub trait OperatingHooks {
     /// Get the capacity of what can be installed in the component.
     fn component_capacity(&self, component: &component::Component) -> Result<usize, Error>;
 
-    // Check if the component exists on the system.
+    /// Check if the component exists on the system.
     fn has_component(&self, component: &component::Component) -> Result<(), Error> {
         self.component_capacity(component).map(|_| ())
     }
@@ -304,6 +312,7 @@ pub trait OperatingHooks {
 }
 
 impl<'a, S: AuthState> SuitManifest<'a, S> {
+    /// Retrieve the envelope of the manifest.
     pub fn envelope(&self) -> Result<Envelope<'a, S>, Error> {
         let mut decoder = self.decoder.clone();
         let tag = decoder.tag()?;
@@ -318,6 +327,7 @@ impl<'a, S: AuthState> SuitManifest<'a, S> {
 }
 
 impl<'a> SuitManifest<'a, New> {
+    /// Create a SUIT manifest from a byte slice.
     pub fn from_bytes(bytes: &'a [u8]) -> Self {
         Self {
             decoder: Decoder::new(bytes),
@@ -325,6 +335,7 @@ impl<'a> SuitManifest<'a, New> {
         }
     }
 
+    /// Authenticate a manifest.
     pub fn authenticate<F>(self, authenticate: F) -> Result<SuitManifest<'a, Authenticated>, Error>
     where
         F: Fn(&[u8], &[u8]) -> Result<bool, Error>,
@@ -387,16 +398,25 @@ impl<'a, S: AuthState> Envelope<'a, S> {
         Ok(None)
     }
 
+    /// Retrieve the raw authentication object.
+    ///
+    /// Returns a reference to a byte slice containing the CBOR-encoded authentication object.
     pub fn auth_object(&self) -> Result<&'a ByteSlice, Error> {
         let auth_object = self.get_object(SuitEnvelope::Authentication)?;
         auth_object.ok_or(Error::NoAuthObject)
     }
 
+    /// Retrieve the manifest object as CBOR.
+    ///
+    /// Returns a reference to a byte slice containing the CBOR-encoded manifest.
+    ///
+    /// See [`Envelope::manifest`] for retrieving a [`manifest::Manifest`] to operate on the manifest.
     pub fn manifest_bytes(&self) -> Result<&'a ByteSlice, Error> {
         let manifest_object = self.get_object(SuitEnvelope::Manifest)?;
         manifest_object.ok_or(Error::NoManifestObject)
     }
 
+    /// Retrieve the inner manifest.
     pub fn manifest(&self) -> Result<Manifest<'a, S>, Error> {
         let manifest_bytes = self.manifest_bytes()?;
         Ok(Manifest::<S>::from_bytes(manifest_bytes))
