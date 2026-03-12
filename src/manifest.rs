@@ -38,6 +38,7 @@ impl<'a, S: AuthState> Manifest<'a, S> {
         }
     }
 
+    /// Retrieve the SUIT manifest encoding version number in the manifest.
     pub fn version(&self) -> Result<u8, Error> {
         let mut decoder = self.decoder.clone();
         let version = decoder
@@ -56,6 +57,7 @@ impl<'a, S: AuthState> Manifest<'a, S> {
         Err(Error::UnsupportedManifestVersion)
     }
 
+    /// Retrieve the manifest sequence number in the manifest.
     pub fn sequence_number(&self) -> Result<u64, Error> {
         let mut decoder = self.decoder.clone();
         let seq_no = decoder
