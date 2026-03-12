@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(dead_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![deny(missing_docs)]
 
 //! Dress-Up provides a parser-only implementation of the [SUIT][suit-rfc] manifest format,
 //! for `no_std` environments. Dress-Up relies on [minicbor] for CBOR parsing.

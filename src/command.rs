@@ -1,5 +1,6 @@
-//use minicbor::decode::Decoder;
-
+//! Provides SUIT command decoding
+//!
+//! The command decoding covers parsing and execution for command sequences in a SUIT manifest.
 use ctutils::{Choice, CtEq};
 use digest::Update;
 use minicbor::bytes::ByteSlice;

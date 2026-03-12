@@ -38,6 +38,7 @@ impl<'a, C> Decode<'a, C> for Component<'a> {
 }
 
 impl<'a> Component<'a> {
+    /// Create a SUIT component from a byte slice.
     pub fn from_bytes(bytes: &'a impl AsRef<[u8]>) -> Component<'a> {
         Component {
             cbor: bytes.as_ref(),

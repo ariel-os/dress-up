@@ -13,10 +13,15 @@ use digest::{ExtendableOutput, FixedOutput, OutputSizeUser, Update};
 #[non_exhaustive]
 #[repr(i64)]
 pub enum SuitDigestAlgorithm {
+    /// SHA-256
     Sha256 = -16,
+    /// SHAKE-128
     Shake128 = -18,
+    /// SHA-384
     Sha384 = -43,
+    /// SHA-256
     Sha512 = -44,
+    /// SHAKE-256
     Shake256 = -45,
 }
 
