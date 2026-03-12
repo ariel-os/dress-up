@@ -29,6 +29,50 @@
 //! - Parallel processing
 //! - Manifest creation
 //!
+//! ### SUIT command support
+//!
+//! Dress-Up strives to support all commands of the SUIT specification. The commands from the table
+//! below are currently supported.
+//!
+//! | Command               |    |
+//! |:----------------------|----|
+//! | Vendor Identifier     | ✅ |
+//! | Class Identifier      | ✅ |
+//! | Image Match           | ✅ |
+//! | Component Slot        | ✅ |
+//! | Check Content         | ✅ |
+//! | Set Component Index   | ✅ |
+//! | Abort                 | ✅ |
+//! | Try Each              | ✅ |
+//! | Write Content         | ✅ |
+//! | Override Parameters   | ✅ |
+//! | Fetch                 | ✅ |
+//! | Copy                  | 🚧 |
+//! | Invoke                | 🚧 |
+//! | Device Identifier     | ✅ |
+//! | Swap                  | 🚧 |
+//! | Run Sequence          | 🚧 |
+//! | Custom commands       | 🚧 |
+//!
+//! ### Parameter support
+//!
+//! Dress-Up supports the following parameters
+//!
+//! | Parameter             |    |
+//! |:----------------------|----|
+//! | Vendor ID             | ✅ |
+//! | Class ID              | ✅ |
+//! | Image Digest          | ✅ |
+//! | Component Slot        | ✅ |
+//! | Strict Order          | ❌ |
+//! | Soft Failure          | 🚧 |
+//! | Image Size            | ✅ |
+//! | Content               | ✅ |
+//! | URI                   | ✅ |
+//! | Source Component      | 🚧 |
+//! | Invoke Args           | 🚧 |
+//! | Device ID             | ✅ |
+//!
 //! ## Workflow
 //!
 //! A typical flow with Dress-Up consists of multiple steps:
