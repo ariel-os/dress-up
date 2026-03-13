@@ -4,8 +4,12 @@
 #![deny(missing_docs)]
 
 //! Dress-Up provides a parser-only implementation of the [SUIT][suit-rfc] manifest format,
-//! for `no_std` environments. Dress-Up relies on [minicbor] for CBOR parsing.
+//! for `no_std` environments. It relies on [minicbor] for CBOR parsing.
 //! Dress-Up parses CBOR on the fly during manifest execution and is zero-copy.
+//!
+//! Dress-Up is OS-agnostic, it provides a [`OperatingHooks`] trait that allow an operating system
+//! to provide integration into the manifest processing.
+//! While Dress-Up is developed under the Ariel OS banner, it is not tied to Ariel OS.
 //!
 //! 🚧 This crate is still under heavy construction 🚧
 //!
@@ -20,20 +24,23 @@
 //! ## Supported RFC features
 //!
 //! Dress-Up supports the following features from the SUIT manifest specification:
+//!
 //! - Multiple components
 //!
 //! Dress-Up does not yet support the following features:
+//!
 //! - Severable elements
 //! - Reporting policy
 //!
 //! Dress-Up will never support the following features. These are out of scope:
+//!
 //! - Parallel processing
 //! - Manifest creation
 //!
 //! ### SUIT command support
 //!
-//! Dress-Up strives to support all commands of the SUIT specification. The commands from the table
-//! below are currently supported.
+//! Dress-Up strives to support all commands of the SUIT specification.
+//! The commands from the table below are currently supported.
 //!
 //! | Command               |    |
 //! |:----------------------|----|
@@ -91,6 +98,7 @@
 //! ## Workflow
 //!
 //! A typical flow with Dress-Up consists of multiple steps:
+//!
 //! 1. Start the parsing by creating a [`SuitManifest`].
 //! 2. Authenticate the manifest via [`SuitManifest::authenticate`].
 //! 3. Derive the [`Envelope`] from the [`SuitManifest`] via [`SuitManifest::envelope`].
@@ -102,7 +110,6 @@
 //! ```
 //! use cbor_edn::StandaloneItem;
 //! use dress_up::SuitManifest;
-//!
 //! # use minicbor::bytes::ByteSlice;
 //! # use dress_up::error::Error;
 //! # fn authenticate(_cose: &[u8], _auth: &[u8]) -> Result<bool, Error> {
@@ -111,62 +118,62 @@
 //!
 //! let input = &r#"
 //! 107({
-//!        / authentication-wrapper / 2:<< [
-//!            / digest: / << [
-//!                / algorithm-id / -16 / "sha256" /,
-//!                / digest-bytes /
-//!h'1f2e7acca0dc2786f2fe4eb947f50873a6a3cfaa98866c5b02e621f42074daf2'
-//!            ] >>,
-//!            / signature: / << 18([
-//!                / protected / << {
-//!                    / alg / 1:-7 / "ES256" /
-//!                } >>,
-//!                / unprotected / {
-//!                },
-//!                / payload / null / nil /,
-//!                / signature / h'27a3d7986eddcc1bee04e1436746408c308ed3
-//!c15ac590a1ca0cf96f85671ccac216cb9a1497fc59e21c15f33c95cf75203e25c287b3
-//!1a57d6cd2ef950b27a7a'
-//!            ]) >>
-//!        ] >>,
-//!        / manifest / 3:<< {
-//!            / manifest-version / 1:1,
-//!            / manifest-sequence-number / 2:1,
-//!            / common / 3:<< {
-//!                / components / 2:[
-//!                    [h'00']
-//!                ],
-//!                / shared-sequence / 4:<< [
-//!                    / directive-override-parameters / 20,{
-//!                        / vendor-id /
-//!1:h'fa6b4a53d5ad5fdfbe9de663e4d41ffe' / fa6b4a53-d5ad-5fdf-
-//!be9d-e663e4d41ffe /,
-//!                        / class-id /
-//!2:h'1492af1425695e48bf429b2d51f2ab45' /
-//!1492af14-2569-5e48-bf42-9b2d51f2ab45 /,
-//!                        / image-digest / 3:<< [
-//!                            / algorithm-id / -16 / "sha256" /,
-//!                            / digest-bytes /
-//!h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
-//!                        ] >>,
-//!                        / image-size / 14:34768
-//!                    },
-//!                    / condition-vendor-identifier / 1,15,
-//!                    / condition-class-identifier / 2,15
-//!                ] >>
-//!            } >>,
-//!            / validate / 7:<< [
-//!                / condition-image-match / 3,15
-//!            ] >>,
-//!            / install / 20:<< [
-//!                / directive-override-parameters / 20,{
-//!                    / uri / 21:"http://example.com/file.bin"
-//!                },
-//!                / directive-fetch / 21,2,
-//!                / condition-image-match / 3,15
-//!            ] >>
-//!        } >>
-//!    })
+//!         / authentication-wrapper / 2:<< [
+//!             / digest: / << [
+//!                 / algorithm-id / -16 / "sha256" /,
+//!                 / digest-bytes /
+//! h'1f2e7acca0dc2786f2fe4eb947f50873a6a3cfaa98866c5b02e621f42074daf2'
+//!             ] >>,
+//!             / signature: / << 18([
+//!                 / protected / << {
+//!                     / alg / 1:-7 / "ES256" /
+//!                 } >>,
+//!                 / unprotected / {
+//!                 },
+//!                 / payload / null / nil /,
+//!                 / signature / h'27a3d7986eddcc1bee04e1436746408c308ed3
+//! c15ac590a1ca0cf96f85671ccac216cb9a1497fc59e21c15f33c95cf75203e25c287b3
+//! 1a57d6cd2ef950b27a7a'
+//!             ]) >>
+//!         ] >>,
+//!         / manifest / 3:<< {
+//!             / manifest-version / 1:1,
+//!             / manifest-sequence-number / 2:1,
+//!             / common / 3:<< {
+//!                 / components / 2:[
+//!                     [h'00']
+//!                 ],
+//!                 / shared-sequence / 4:<< [
+//!                     / directive-override-parameters / 20,{
+//!                         / vendor-id /
+//! 1:h'fa6b4a53d5ad5fdfbe9de663e4d41ffe' / fa6b4a53-d5ad-5fdf-
+//! be9d-e663e4d41ffe /,
+//!                         / class-id /
+//! 2:h'1492af1425695e48bf429b2d51f2ab45' /
+//! 1492af14-2569-5e48-bf42-9b2d51f2ab45 /,
+//!                         / image-digest / 3:<< [
+//!                             / algorithm-id / -16 / "sha256" /,
+//!                             / digest-bytes /
+//! h'00112233445566778899aabbccddeeff0123456789abcdeffedcba9876543210'
+//!                         ] >>,
+//!                         / image-size / 14:34768
+//!                     },
+//!                     / condition-vendor-identifier / 1,15,
+//!                     / condition-class-identifier / 2,15
+//!                 ] >>
+//!             } >>,
+//!             / validate / 7:<< [
+//!                 / condition-image-match / 3,15
+//!             ] >>,
+//!             / install / 20:<< [
+//!                 / directive-override-parameters / 20,{
+//!                     / uri / 21:"http://example.com/file.bin"
+//!                 },
+//!                 / directive-fetch / 21,2,
+//!                 / condition-image-match / 3,15
+//!             ] >>
+//!         } >>
+//!     })
 //! "#;
 //!
 //! let cbor = StandaloneItem::parse(input).unwrap().to_cbor().unwrap();
