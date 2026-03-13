@@ -7,15 +7,15 @@
 //! for `no_std` environments. It relies on [minicbor] for CBOR parsing.
 //! Dress‑Up parses CBOR on the fly during manifest execution and is zero-copy.
 //!
-//! Dress‑Up is OS-agnostic, it provides a [`OperatingHooks`] trait that allow an operating system
+//! Dress‑Up is OS-agnostic, it provides an [`OperatingHooks`] trait that allow an operating system
 //! to provide integration into the manifest processing.
 //! While Dress‑Up is developed under the Ariel OS banner, it is not tied to Ariel OS.
 //!
 //! 🚧 This crate is still under heavy construction 🚧
 //!
 //! The full manifest must be in memory during parsing. The authentication object covers the inner
-//! manifest. Both must be in for authentication. The other reason is that Dress‑Up is zero-copy.
-//! All text and byte strings are references into the CBOR data.
+//! manifest. Both must be in memory for the authentication process. The other reason is that
+//! Dress‑Up is zero-copy. All text and byte strings are references into the CBOR data.
 //!
 //! Dress‑Up only supports sequential processing of components. Each component described in a
 //! manifest processes serially. This saves the amount of memory required during the manifest
