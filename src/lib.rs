@@ -74,15 +74,6 @@
 //! | Invoke Args           | 🚧 |
 //! | Device ID             | ✅ |
 //!
-//! ## Workflow
-//!
-//! A typical flow with Dress-Up consists of multiple steps:
-//! 1. Start the parsing by creating a [`SuitManifest`].
-//! 2. Authenticate the manifest via [`SuitManifest::authenticate`].
-//! 3. Derive the [`Envelope`] from the [`SuitManifest`] via [`SuitManifest::envelope`].
-//! 4. Deriver the inner [`Manifest`] from the [`Envelope`] via [`Envelope::manifest`].
-//! 5. check the existence of different command sequences and execute them when available.
-//!
 //! ## Overview
 //!
 //! This section gives a brief overview of the primary types in this crate.
@@ -97,11 +88,26 @@
 //!   required by Dress-Up. The operating system or application running Dress-Up must provide an
 //!   implementation.
 //!
+//! ## Workflow
+//!
+//! A typical flow with Dress-Up consists of multiple steps:
+//! 1. Start the parsing by creating a [`SuitManifest`].
+//! 2. Authenticate the manifest via [`SuitManifest::authenticate`].
+//! 3. Derive the [`Envelope`] from the [`SuitManifest`] via [`SuitManifest::envelope`].
+//! 4. Deriver the inner [`Manifest`] from the [`Envelope`] via [`Envelope::manifest`].
+//! 5. check the existence of different command sequences and execute them when available.
+//!
 //! ## Example
 //!
 //! ```
 //! use cbor_edn::StandaloneItem;
 //! use dress_up::SuitManifest;
+//!
+//! # use minicbor::bytes::ByteSlice;
+//! # use dress_up::error::Error;
+//! # fn authenticate(_cose: &[u8], _auth: &[u8]) -> Result<bool, Error> {
+//! #    Ok(true)
+//! # }
 //!
 //! let input = &r#"
 //! 107({
@@ -161,10 +167,17 @@
 //!            ] >>
 //!        } >>
 //!    })
-//!"#;
+//! "#;
 //!
-//!let cbor = StandaloneItem::parse(input).unwrap().to_cbor().unwrap();
-//!let suit = SuitManifest::from_bytes(&cbor);
+//! let cbor = StandaloneItem::parse(input).unwrap().to_cbor().unwrap();
+//! let suit = SuitManifest::from_bytes(&cbor);
+//! let suit = suit.authenticate(|cose, payload| { authenticate(cose, payload) })?;
+//! let envelope = suit.envelope()?;
+//! let manifest = envelope.manifest()?;
+//!
+//! assert_eq!(manifest.version()?, 1);
+//! assert_eq!(manifest.sequence_number()?, 1);
+//! # Ok::<(), Error>(())
 //! ```
 //! [suit-rfc]: https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34
 use core::marker::PhantomData;
