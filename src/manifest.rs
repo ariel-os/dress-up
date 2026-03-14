@@ -239,11 +239,12 @@ impl<'a> Manifest<'a, Authenticated> {
                     .map_err(|_| Error::UnexpectedCbor(self.decoder.position()))?;
                 let component_info = ComponentInfo::new(component, idx);
 
-                let common_sequence = CommandSequenceExecutor::new(common, os_hooks);
+                let common_sequence = CommandSequenceExecutor::new(common, components, os_hooks);
                 let state = common_sequence
                     .process(start_state.clone(), &component_info)
                     .map_err(|e| e.add_offset(common_offset))?;
-                let section = CommandSequenceExecutor::new(command_section.cbor, os_hooks);
+                let section =
+                    CommandSequenceExecutor::new(command_section.cbor, components, os_hooks);
                 section
                     .process(state, &component_info)
                     .map_err(|e| e.add_offset(command_section.offset))?;
