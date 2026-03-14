@@ -23,6 +23,8 @@ pub enum Error {
     EndOfInput,
     /// Authentication structure is not valid.
     InvalidAuthenticationStructure,
+    /// SUIT Manifest section is not severable.
+    NotSeverable(i16),
     /// Invalid command sequence.
     InvalidCommandSequence(usize),
     /// Invalid common section.
@@ -61,6 +63,22 @@ impl Error {
     pub(crate) fn digest_algo_error(value: i64) -> Self {
         Error::UnsupportedDigestAlgo(value)
     }
+
+    /// Use to modify error position on bytes-string wrapped CBOR
+    pub(crate) fn add_offset(self, offset: usize) -> Self {
+        match self {
+            Error::ConditionMatchFail(pos) => Error::ConditionMatchFail(pos + offset),
+            Error::TryEachFail(pos) => Error::TryEachFail(pos + offset),
+            Error::InvalidCommandSequence(pos) => Error::InvalidCommandSequence(pos + offset),
+            Error::ParameterNotSet(pos) => Error::ParameterNotSet(pos + offset),
+            Error::UnexpectedCbor(pos) => Error::UnexpectedCbor(pos + offset),
+            Error::UnexpectedIndefiniteLength(pos) => {
+                Error::UnexpectedIndefiniteLength(pos + offset)
+            }
+            Error::Utf8Error(pos) => Error::Utf8Error(pos + offset),
+            e => e,
+        }
+    }
 }
 
 impl core::fmt::Display for Error {
@@ -86,6 +104,7 @@ impl core::fmt::Display for Error {
             Self::UnexpectedIndefiniteLength(n) => {
                 write!(f, "unexpected indefinite length cbor container at {n}")
             }
+            Self::NotSeverable(n) => write!(f, "section {n} not severable"),
             Self::UnsupportedCommand(n) => write!(f, "command {n} not supported"),
             Self::UnsupportedComponentIdentifier(n) => {
                 write!(f, "component identifier {n} not supported")
