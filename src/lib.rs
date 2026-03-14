@@ -440,7 +440,7 @@ impl<'a, S: AuthState> Envelope<'a, S> {
     /// Retrieve the inner manifest.
     pub fn manifest(&self) -> Result<Manifest<'a, S>, Error> {
         let manifest_bytes = self.manifest_bytes()?;
-        Ok(Manifest::<S>::from_bytes(manifest_bytes))
+        Ok(Manifest::<S>::new(manifest_bytes, self.decoder.clone()))
     }
 }
 

@@ -1,6 +1,7 @@
 //! Inner SUIT manifest.
 use core::marker::PhantomData;
 
+use digest::Update;
 use minicbor::bytes::ByteSlice;
 use minicbor::data::Token;
 use minicbor::decode::Decoder;
@@ -11,12 +12,13 @@ use crate::component::{ComponentInfo, ComponentIter};
 use crate::consts::SuitCommand;
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
-use crate::{AuthState, Authenticated, OperatingHooks};
+use crate::{AuthState, Authenticated, Envelope, OperatingHooks};
 
 /// Inner SUIT manifest.
 #[derive(Debug, Clone)]
 pub struct Manifest<'a, S: AuthState> {
     decoder: Decoder<'a>,
+    envelope_decoder: Decoder<'a>,
     phantom: PhantomData<S>,
 }
 
@@ -31,9 +33,13 @@ fn try_into_u64(token: Token) -> Result<u64, Error> {
 }
 
 impl<'a, S: AuthState> Manifest<'a, S> {
-    pub(crate) fn from_bytes<STATE: AuthState>(bytes: &'a ByteSlice) -> Manifest<'a, STATE> {
+    pub(crate) fn new<STATE: AuthState>(
+        bytes: &'a ByteSlice,
+        envelope_decoder: Decoder<'a>,
+    ) -> Manifest<'a, STATE> {
         Manifest::<'a, STATE> {
             decoder: Decoder::new(bytes),
+            envelope_decoder,
             phantom: PhantomData,
         }
     }
@@ -75,6 +81,33 @@ impl<'a, S: AuthState> Manifest<'a, S> {
 }
 
 impl<'a> Manifest<'a, Authenticated> {
+    fn find_severable(
+        &self,
+        section: crate::consts::SuitEnvelope,
+        digest_bytes: &'a [u8],
+    ) -> Result<Option<&'a ByteSlice>, Error> {
+        let digest: crate::digest::SuitDigest = minicbor::decode(digest_bytes)?;
+        let wrapped_section = Envelope {
+            decoder: self.envelope_decoder.clone(),
+            phantom: PhantomData::<Authenticated>,
+        }
+        // Integrity check values are computed over entire bstr enlosing
+        // manifest element (section 8.4.12).
+        .get_object_wrapped(section)?;
+
+        if let Some(section_wrapped_bytes) = wrapped_section {
+            let mut hasher = digest.hasher()?;
+            hasher.update(section_wrapped_bytes);
+            if !digest.match_hasher(hasher)? {
+                Err(Error::AuthenticationFailure)
+            } else {
+                Ok(Some(Decoder::new(section_wrapped_bytes).bytes()?.into()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     fn find_command_sequence(
         &self,
         section: crate::consts::Manifest,
@@ -87,8 +120,20 @@ impl<'a> Manifest<'a, Authenticated> {
             let key = decoder.i16()?;
             let position = decoder.position();
             if key == section.into() {
-                let value = decoder.bytes()?;
-                return Ok(Some((value.into(), position)));
+                match decoder.datatype()? {
+                    minicbor::data::Type::Bytes => {
+                        let value = decoder.bytes()?;
+                        return Ok(Some((value.into(), position)));
+                    }
+                    // Array means that this is a digest relative to a severed element
+                    minicbor::data::Type::Array => {
+                        let section_key = section.try_into()?;
+                        let section_bytes =
+                            self.find_severable(section_key, decoder.sub_cbor()?)?;
+                        return Ok(section_bytes.map(|b| (b, position)));
+                    }
+                    _ => return Err(Error::UnexpectedCbor(position)),
+                }
             } else {
                 decoder.skip()?;
             }

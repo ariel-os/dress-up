@@ -23,6 +23,8 @@ pub enum Error {
     EndOfInput,
     /// Authentication structure is not valid.
     InvalidAuthenticationStructure,
+    /// SUIT Manifest section is not severable.
+    NotSeverable(i16),
     /// Invalid command sequence.
     InvalidCommandSequence(usize),
     /// Invalid common section.
@@ -102,6 +104,7 @@ impl core::fmt::Display for Error {
             Self::UnexpectedIndefiniteLength(n) => {
                 write!(f, "unexpected indefinite length cbor container at {n}")
             }
+            Self::NotSeverable(n) => write!(f, "section {n} not severable"),
             Self::UnsupportedCommand(n) => write!(f, "command {n} not supported"),
             Self::UnsupportedComponentIdentifier(n) => {
                 write!(f, "component identifier {n} not supported")
