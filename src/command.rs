@@ -17,7 +17,9 @@ use crate::OperatingHooks;
 #[derive(Clone, Debug)]
 pub(crate) enum CommandArgument<'a> {
     Report(ReportingPolicy),
-    Cbor(Decoder<'a>),
+    // Argument block + offset of the block
+    // We keep offset for error correction
+    Cbor(Decoder<'a>, usize),
 }
 
 impl<'a> CommandArgument<'a> {
@@ -26,8 +28,9 @@ impl<'a> CommandArgument<'a> {
             let policy = d.decode::<ReportingPolicy>()?;
             Ok(CommandArgument::Report(policy))
         } else {
+            let offset = d.position();
             let bytes = d.sub_cbor()?;
-            Ok(CommandArgument::Cbor(Decoder::new(bytes)))
+            Ok(CommandArgument::Cbor(Decoder::new(bytes), offset))
         }
     }
 }
@@ -41,10 +44,18 @@ pub(crate) struct Command<'a> {
 
 impl<'a> Command<'a> {
     fn get_argument_cbor<'b>(&'b mut self) -> Result<&'b mut Decoder<'a>, Error> {
-        if let CommandArgument::Cbor(ref mut decoder) = self.argument {
+        if let CommandArgument::Cbor(ref mut decoder, _) = self.argument {
             return Ok(decoder);
         }
         Err(Error::InvalidCommandSequence(0))
+    }
+
+    fn get_argument_offset(&self) -> usize {
+        if let CommandArgument::Cbor(_, offset) = self.argument {
+            offset
+        } else {
+            0
+        }
     }
 
     fn get_report_policy(&self) -> Result<ReportingPolicy, Error> {
@@ -171,8 +182,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
             let mut command = command?;
             if !match_component {
                 if matches!(command.command, SuitCommand::SetComponentIndex) {
-                    if let CommandArgument::Cbor(mut decoder) = command.argument {
-                        match_component = component.in_applylist(&mut decoder)?;
+                    if let CommandArgument::Cbor(mut decoder, arg_offset) = command.argument {
+                        match_component = component
+                            .in_applylist(&mut decoder)
+                            .map_err(|e| e.add_offset(arg_offset))?;
                     }
                 }
             } else {
@@ -182,10 +195,14 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     }
                     SuitCommand::Abort => return Err(Error::ConditionMatchFail(command.position)),
                     SuitCommand::OverrideParameters => {
-                        state.update_parameter(command.get_argument_cbor()?)?;
+                        state
+                            .update_parameter(command.get_argument_cbor()?)
+                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
                     }
                     SuitCommand::SetComponentIndex => {
-                        match_component = component.in_applylist(command.get_argument_cbor()?)?;
+                        match_component = component
+                            .in_applylist(command.get_argument_cbor()?)
+                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
                     }
                     SuitCommand::CheckContent => {
                         // byte by byte check
@@ -219,7 +236,8 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                         Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
                     }
                     SuitCommand::TryEach => {
-                        self.try_each(&mut state, component, command.get_argument_cbor()?)?;
+                        self.try_each(&mut state, component, command.get_argument_cbor()?)
+                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
                     }
                     SuitCommand::VendorIdentifier => {
                         self.cond_vendor_identifier(&state, component.component())?;
@@ -628,7 +646,7 @@ mod tests {
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
         let res = sequence.process(state.clone(), &info).unwrap_err();
-        assert_eq!(res, Error::TryEachFail(5));
+        assert_eq!(res, Error::TryEachFail(7));
     }
 
     #[test]
