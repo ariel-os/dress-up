@@ -21,6 +21,7 @@ pub(crate) struct ManifestState<'a> {
     pub(crate) component_slot: Option<u64>,
     pub(crate) image_size: Option<usize>,
     pub(crate) uri: Option<&'a str>,
+    pub(crate) invoke_args: Option<&'a ByteSlice>,
 }
 
 impl<'a> ManifestState<'a> {
@@ -114,6 +115,16 @@ impl<'a> ManifestState<'a> {
         Ok(())
     }
 
+    pub(crate) fn set_invoke_args(&mut self, invoke_args: &'a ByteSlice) {
+        self.invoke_args = Some(invoke_args)
+    }
+
+    pub(crate) fn invoke_args_from_cbor(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
+        let invoke_args = decoder.bytes()?;
+        self.set_invoke_args(invoke_args.into());
+        Ok(())
+    }
+
     pub(crate) fn update_parameter(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
         let length = decoder.map()?;
         let length = length.ok_or(Error::UnexpectedIndefiniteLength(decoder.position()))?;
@@ -129,6 +140,7 @@ impl<'a> ManifestState<'a> {
                 SuitParameter::SourceComponent => todo!(),
                 SuitParameter::DeviceId => self.device_id_from_cbor(decoder)?,
                 SuitParameter::Content => self.content_from_cbor(decoder)?,
+                SuitParameter::InvokeArgs => self.invoke_args_from_cbor(decoder)?,
                 param => return Err(Error::UnsupportedParameter(param.into())),
             };
         }
@@ -233,6 +245,17 @@ mod tests {
         params.update_parameter(&mut decoder).unwrap();
 
         assert_eq!(params.uri.unwrap(), uri);
+    }
+
+    #[test]
+    fn invoke_args() {
+        let invoke_arg = [0x02];
+        let input = std::vec![0xA1, 0x17, 0x41, 0x02];
+        let mut params = ManifestState::default();
+        let mut decoder = Decoder::new(&input);
+        params.update_parameter(&mut decoder).unwrap();
+
+        assert_eq!(params.invoke_args.unwrap().as_ref(), invoke_arg);
     }
 
     #[test]
