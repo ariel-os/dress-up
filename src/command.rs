@@ -499,46 +499,56 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     self.cond_image_match(state, &source_component)?;
                 }
 
-                let source_size = self.os_hooks.component_size(&source_component)?;
-
-                let mut read_source_buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
-                let mut read_target_buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
-
-                for offset in (0..source_size).step_by(read_source_buf.len()) {
-                    let diff = source_size.saturating_sub(offset);
-                    let read_size = if diff < read_source_buf.len() {
-                        diff
-                    } else {
-                        read_source_buf.len()
-                    };
-
-                    self.os_hooks.component_read(
-                        &source_component,
-                        state.component_slot,
-                        offset,
-                        &mut read_source_buf[0..read_size],
-                    )?;
-                    self.os_hooks.component_read(
-                        component.component(),
-                        state.component_slot,
-                        offset,
-                        &mut read_target_buf[0..read_size],
-                    )?;
-                    self.os_hooks.component_write(
-                        &source_component,
-                        state.component_slot,
-                        offset,
-                        &read_target_buf[0..read_size],
-                    )?;
-                    self.os_hooks.component_write(
-                        component.component(),
-                        state.component_slot,
-                        offset,
-                        &read_source_buf[0..read_size],
-                    )?;
+                #[cfg(not(feature = "built-in-swap"))]
+                {
+                    self.os_hooks
+                        .swap(component.component(), &source_component)?;
+                    return Ok(());
                 }
 
-                return Ok(());
+                #[cfg(feature = "built-in-swap")]
+                {
+                    let source_size = self.os_hooks.component_size(&source_component)?;
+
+                    let mut read_source_buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
+                    let mut read_target_buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
+
+                    for offset in (0..source_size).step_by(read_source_buf.len()) {
+                        let diff = source_size.saturating_sub(offset);
+                        let read_size = if diff < read_source_buf.len() {
+                            diff
+                        } else {
+                            read_source_buf.len()
+                        };
+
+                        self.os_hooks.component_read(
+                            &source_component,
+                            state.component_slot,
+                            offset,
+                            &mut read_source_buf[0..read_size],
+                        )?;
+                        self.os_hooks.component_read(
+                            component.component(),
+                            state.component_slot,
+                            offset,
+                            &mut read_target_buf[0..read_size],
+                        )?;
+                        self.os_hooks.component_write(
+                            &source_component,
+                            state.component_slot,
+                            offset,
+                            &read_target_buf[0..read_size],
+                        )?;
+                        self.os_hooks.component_write(
+                            component.component(),
+                            state.component_slot,
+                            offset,
+                            &read_source_buf[0..read_size],
+                        )?;
+                    }
+
+                    return Ok(());
+                }
             }
         }
         Err(Error::InvalidSourceComponent(source_index))
@@ -867,7 +877,8 @@ mod tests {
     }
 
     #[test]
-    fn swap_components() {
+    #[cfg(feature = "built-in-swap")]
+    fn swap_fallback() {
         let hooks = TestHooksMultiple::new();
         let mut components = hooks.components.get();
         components[0] = [0xAA, 0xBB, 0xCC, 0xDD];
