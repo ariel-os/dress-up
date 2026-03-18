@@ -155,16 +155,25 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
             if seq.is_empty() {
                 return Ok(());
             }
+
             let try_sequence = CommandSequenceExecutor::new(seq, self.os_hooks);
-            let res = try_sequence.process(state.clone(), component);
-            if let Ok(res) = res {
-                *state = res;
-                return Ok(());
-            }
-            // Bail out on any error except the ConditionMatchFail
-            if !matches!(res, Err(Error::ConditionMatchFail(_))) {
-                return res.map(|_| ());
-            }
+
+            let mut try_sequence_state = state.clone();
+
+            // Soft Failure defaults to True in every Suit Command Sequence
+            // in the try each argument.
+            try_sequence_state.soft_failure = true;
+            try_sequence_state.enable_soft_failure_set();
+            match try_sequence.process(try_sequence_state, component) {
+                Ok(new_state) => {
+                    state.update_state_preserve_soft_failure(new_state);
+                    return Ok(());
+                }
+                Err(Error::SoftConditionFailure) => continue,
+                Err(e) => {
+                    return Err(e);
+                }
+            };
         }
         Err(Error::TryEachFail(decoder.position()))
     }
@@ -201,67 +210,81 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     }
                 }
             } else {
-                match command.command {
-                    SuitCommand::Unset => {
-                        return Err(Error::UnsupportedCommand(command.command.into()))
-                    }
-                    SuitCommand::Abort => return Err(Error::ConditionMatchFail(command.position)),
-                    SuitCommand::OverrideParameters => {
-                        state
-                            .update_parameter(command.get_argument_cbor()?)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
-                    }
-                    SuitCommand::SetComponentIndex => {
-                        match_component = component
-                            .in_applylist(command.get_argument_cbor()?)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
-                    }
-                    SuitCommand::CheckContent => {
-                        // byte by byte check
-                        self.cond_check_content(&state, component.component())?;
-                    }
-                    SuitCommand::ClassIdentifier => {
-                        self.cond_class_identifier(&state, component.component())?;
-                    }
-                    SuitCommand::ComponentSlot => {
-                        self.cond_component_slot(&state, component.component())?;
-                    }
-                    SuitCommand::Copy => Err(Error::UnsupportedCommand(SuitCommand::Copy.into()))?,
-                    SuitCommand::DeviceIdentifier => {
-                        self.cond_device_identifier(&state, component.component())?;
-                    }
-                    SuitCommand::Fetch => {
-                        self.directive_fetch(&state, component.component())?;
-                    }
-                    SuitCommand::ImageMatch => {
-                        // Digest check
-                        self.cond_image_match(&state, component.component())?;
-                    }
-
-                    SuitCommand::Invoke => {
-                        Err(Error::UnsupportedCommand(SuitCommand::Invoke.into()))?
-                    }
-                    SuitCommand::RunSequence => {
-                        Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
-                    }
-                    SuitCommand::Swap => {
-                        Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
-                    }
-                    SuitCommand::TryEach => {
-                        self.try_each(&mut state, component, command.get_argument_cbor()?)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
-                    }
-                    SuitCommand::VendorIdentifier => {
-                        self.cond_vendor_identifier(&state, component.component())?;
-                    }
-                    SuitCommand::WriteContent => {
-                        self.directive_write(&state, component.component())?;
-                    }
-                    SuitCommand::Custom(_n) => todo!(),
-                }
+                self.execute_command(&mut command, &mut state, component, &mut match_component)
+                    .map_err(|e| {
+                        if state.soft_failure && e.is_condition_failure() {
+                            Error::SoftConditionFailure
+                        } else {
+                            e
+                        }
+                    })?;
             }
         }
         Ok(state)
+    }
+
+    fn execute_command(
+        &self,
+        command: &mut Command<'a>,
+        state: &mut ManifestState<'a>,
+        component: &'a ComponentInfo,
+        match_component: &mut bool,
+    ) -> Result<(), Error> {
+        let offset = command.get_argument_offset();
+        match command.command {
+            SuitCommand::Unset => return Err(Error::UnsupportedCommand(command.command.into())),
+            SuitCommand::Abort => return Err(Error::ConditionMatchFail(command.position)),
+            SuitCommand::OverrideParameters => {
+                state
+                    .update_parameter(command.get_argument_cbor()?)
+                    .map_err(|e| e.add_offset(offset))?;
+            }
+            SuitCommand::SetComponentIndex => {
+                *match_component = component
+                    .in_applylist(command.get_argument_cbor()?)
+                    .map_err(|e| e.add_offset(offset))?;
+            }
+            SuitCommand::CheckContent => {
+                // byte by byte check
+                self.cond_check_content(state, component.component())?;
+            }
+            SuitCommand::ClassIdentifier => {
+                self.cond_class_identifier(state, component.component())?;
+            }
+            SuitCommand::ComponentSlot => {
+                self.cond_component_slot(state, component.component())?;
+            }
+            SuitCommand::Copy => Err(Error::UnsupportedCommand(SuitCommand::Copy.into()))?,
+            SuitCommand::DeviceIdentifier => {
+                self.cond_device_identifier(state, component.component())?;
+            }
+            SuitCommand::Fetch => {
+                self.directive_fetch(state, component.component())?;
+            }
+            SuitCommand::ImageMatch => {
+                // Digest check
+                self.cond_image_match(state, component.component())?;
+            }
+
+            SuitCommand::Invoke => Err(Error::UnsupportedCommand(SuitCommand::Invoke.into()))?,
+            SuitCommand::RunSequence => {
+                Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
+            }
+
+            SuitCommand::Swap => Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?,
+            SuitCommand::TryEach => {
+                self.try_each(state, component, command.get_argument_cbor()?)
+                    .map_err(|e| e.add_offset(offset))?;
+            }
+            SuitCommand::VendorIdentifier => {
+                self.cond_vendor_identifier(state, component.component())?;
+            }
+            SuitCommand::WriteContent => {
+                self.directive_write(state, component.component())?;
+            }
+            SuitCommand::Custom(_n) => todo!(),
+        }
+        Ok(())
     }
 
     fn cond_class_identifier(
@@ -700,5 +723,21 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
         let res = sequence.process(state.clone(), &info);
         assert_eq!(res, Ok(state));
+    }
+
+    #[test]
+    fn try_each_soft_failure_false() {
+        // Try each statement with override parameters on the soft failure
+        // to abort on next condition failure.
+        let input: &[u8] = &[
+            0x82, 0x0F, 0x82, 0x47, 0x84, 0x14, 0xA1, 0x0D, 0xF4, 0x0E, 0x01, 0x45, 0x82, 0x14,
+            0xA1, 0x05, 0x02,
+        ];
+        let hooks = create_test_hooks();
+        let info = create_test_component();
+        let state = ManifestState::default();
+        let sequence = CommandSequenceExecutor::new(input.into(), &hooks);
+        let res = sequence.process(state.clone(), &info).unwrap_err();
+        assert_eq!(res, Error::ConditionMatchFail(7));
     }
 }
