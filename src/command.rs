@@ -178,6 +178,34 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         Err(Error::TryEachFail(decoder.position()))
     }
 
+    fn run_sequence(
+        &self,
+        state: &mut ManifestState<'a>,
+        component: &'a ComponentInfo<'a>,
+        decoder: &mut Decoder<'a>,
+    ) -> Result<(), Error> {
+        let seq = decoder.decode::<&ByteSlice>()?;
+        if seq.is_empty() {
+            return Ok(());
+        }
+
+        let sequence = CommandSequenceExecutor::new(seq, self.os_hooks);
+
+        let mut run_sequence_state = state.clone();
+        // A run sequence always start with soft failure set to false.
+        run_sequence_state.soft_failure = false;
+        run_sequence_state.enable_soft_failure_set();
+        let res = match sequence.process(run_sequence_state, component) {
+            Ok(new_state) => {
+                state.update_state_preserve_soft_failure(new_state);
+                Ok(())
+            }
+            Err(Error::SoftConditionFailure) => Ok(()),
+            Err(e) => return Err(e),
+        };
+        res
+    }
+
     fn enter_sequence(decoder: &mut Decoder) -> Result<u64, Error> {
         let length = decoder.array()?;
         let length = match length {
@@ -268,9 +296,9 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
 
             SuitCommand::Invoke => Err(Error::UnsupportedCommand(SuitCommand::Invoke.into()))?,
             SuitCommand::RunSequence => {
-                Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
+                self.run_sequence(state, component, command.get_argument_cbor()?)
+                    .map_err(|e| e.add_offset(offset))?;
             }
-
             SuitCommand::Swap => Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?,
             SuitCommand::TryEach => {
                 self.try_each(state, component, command.get_argument_cbor()?)
