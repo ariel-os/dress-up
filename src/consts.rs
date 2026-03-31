@@ -33,6 +33,18 @@ pub enum SuitEnvelope {
     Text = 23,
 }
 
+impl TryFrom<Manifest> for SuitEnvelope {
+    type Error = crate::error::Error;
+    fn try_from(value: Manifest) -> Result<Self, Self::Error> {
+        Ok(match value {
+            Manifest::PayloadFetch => SuitEnvelope::PayloadFetch,
+            Manifest::PayloadInstallation => SuitEnvelope::PayloadInstallation,
+            Manifest::TextDescription => SuitEnvelope::Text,
+            _ => return Err(crate::error::Error::NotSeverable(value.into())),
+        })
+    }
+}
+
 /// Manifest elements
 ///
 /// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-manifest-elements>
