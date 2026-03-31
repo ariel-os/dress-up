@@ -21,6 +21,8 @@ pub(crate) struct ManifestState<'a> {
     pub(crate) component_slot: Option<u64>,
     pub(crate) image_size: Option<usize>,
     pub(crate) uri: Option<&'a str>,
+    soft_failure_settable: bool,
+    pub(crate) soft_failure: bool,
 }
 
 impl<'a> ManifestState<'a> {
@@ -114,6 +116,43 @@ impl<'a> ManifestState<'a> {
         Ok(())
     }
 
+    pub(crate) fn enable_soft_failure_set(&mut self) {
+        self.soft_failure_settable = true;
+    }
+
+    pub(crate) fn disable_soft_failure_set(&mut self) {
+        self.soft_failure_settable = false;
+    }
+
+    /// Set the soft failure state. Setting outside of Try Each or Run Sequence should
+    /// led to an abortion.
+    pub(crate) fn set_soft_failure(&mut self, soft_failure: bool) -> Result<(), Error> {
+        if !self.soft_failure_settable {
+            return Err(Error::SoftFailureUnsettable(0));
+        }
+        self.soft_failure = soft_failure;
+        Ok(())
+    }
+
+    pub(crate) fn soft_failure_from_cbor(
+        &mut self,
+        decoder: &mut Decoder<'a>,
+    ) -> Result<(), Error> {
+        let soft_failure = decoder.bool()?;
+        self.set_soft_failure(soft_failure)?;
+        Ok(())
+    }
+
+    /// Update the state after a Run Sequence or a Try Each Sequence termination
+    /// without updating [ManifestState::soft_failure] since it is scoped to a run sequence.
+    pub(crate) fn update_state_preserve_soft_failure(&mut self, new_state: ManifestState<'a>) {
+        let soft_failure = self.soft_failure;
+        let soft_failure_settable = self.soft_failure_settable;
+        *self = new_state;
+        self.soft_failure = soft_failure;
+        self.soft_failure_settable = soft_failure_settable;
+    }
+
     pub(crate) fn update_parameter(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
         let length = decoder.map()?;
         let length = length.ok_or(Error::UnexpectedIndefiniteLength(decoder.position()))?;
@@ -129,6 +168,7 @@ impl<'a> ManifestState<'a> {
                 SuitParameter::SourceComponent => todo!(),
                 SuitParameter::DeviceId => self.device_id_from_cbor(decoder)?,
                 SuitParameter::Content => self.content_from_cbor(decoder)?,
+                SuitParameter::SoftFailure => self.soft_failure_from_cbor(decoder)?,
                 param => return Err(Error::UnsupportedParameter(param.into())),
             };
         }
@@ -233,6 +273,42 @@ mod tests {
         params.update_parameter(&mut decoder).unwrap();
 
         assert_eq!(params.uri.unwrap(), uri);
+    }
+
+    #[test]
+    fn soft_failure() {
+        let soft_failure = true;
+        let input = std::vec![0xA1, 0x0D, 0xF5];
+        let mut params = ManifestState::default();
+        let mut decoder = Decoder::new(&input);
+        params.enable_soft_failure_set();
+        params.update_parameter(&mut decoder).unwrap();
+
+        assert_eq!(params.soft_failure, soft_failure);
+    }
+
+    #[test]
+    fn soft_failure_fail() {
+        let input = std::vec![0xA1, 0x0D, 0xF5];
+        let mut params = ManifestState::default();
+        let mut decoder = Decoder::new(&input);
+        let res = params.update_parameter(&mut decoder).unwrap_err();
+
+        assert_eq!(res, Error::SoftFailureUnsettable(0));
+    }
+
+    #[test]
+    fn update_state_preserve_soft_failure() {
+        let mut initial_state = ManifestState::default();
+        let mut new_state = initial_state.clone();
+        new_state.soft_failure = true;
+        new_state.soft_failure_settable = true;
+        new_state.component_slot = Some(1);
+
+        initial_state.update_state_preserve_soft_failure(new_state);
+        assert!(!initial_state.soft_failure);
+        assert!(!initial_state.soft_failure_settable);
+        assert_eq!(initial_state.component_slot, Some(1));
     }
 
     #[test]

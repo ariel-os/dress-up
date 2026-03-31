@@ -19,12 +19,18 @@ pub enum Error {
     ConditionMatchFail(usize),
     /// SUIT Try Each command sequence failed every sequence.
     TryEachFail(usize),
+    /// SUIT Run Sequence failed.
+    RunSequenceFail(usize),
     /// Unexpected end of the CBOR input.
     EndOfInput,
     /// Authentication structure is not valid.
     InvalidAuthenticationStructure,
     /// Invalid command sequence.
     InvalidCommandSequence(usize),
+    /// SUIT parameter soft-failure set outside of a run-sequence or try-each context.
+    SoftFailureUnsettable(usize),
+    /// Condition failure in a soft-failure context — can be ignored by the caller
+    SoftConditionFailure,
     /// Invalid common section.
     InvalidCommonSection,
     /// No authentication object found inside the SUIT envelope.
@@ -62,11 +68,17 @@ impl Error {
         Error::UnsupportedDigestAlgo(value)
     }
 
+    pub(crate) fn is_condition_failure(&self) -> bool {
+        matches!(self, Error::ConditionMatchFail(_))
+    }
+
     /// Use to modify error position on bytes-string wrapped CBOR
     pub(crate) fn add_offset(self, offset: usize) -> Self {
         match self {
             Error::ConditionMatchFail(pos) => Error::ConditionMatchFail(pos + offset),
             Error::TryEachFail(pos) => Error::TryEachFail(pos + offset),
+            Error::RunSequenceFail(pos) => Error::RunSequenceFail(pos + offset),
+            Error::SoftFailureUnsettable(pos) => Error::SoftFailureUnsettable(pos + offset),
             Error::InvalidCommandSequence(pos) => Error::InvalidCommandSequence(pos + offset),
             Error::ParameterNotSet(pos) => Error::ParameterNotSet(pos + offset),
             Error::UnexpectedCbor(pos) => Error::UnexpectedCbor(pos + offset),
@@ -86,6 +98,11 @@ impl core::fmt::Display for Error {
             Self::CapacityError => write!(f, "string capacity exhausted"),
             Self::ConditionMatchFail(pos) => write!(f, "condition mismatch at {pos}"),
             Self::TryEachFail(pos) => write!(f, "try each sequence failed at {pos}"),
+            Self::RunSequenceFail(pos) => write!(f, "run sequence failed at {pos}"),
+            Self::SoftFailureUnsettable(pos) => write!(
+                f,
+                "soft failure set outside run sequence or try each sequence at {pos} "
+            ),
             Self::EndOfInput => write!(f, "end of CBOR input"),
             Self::InvalidAuthenticationStructure => write!(f, "invalide authentication structure"),
             Self::InvalidCommandSequence(n) => write!(f, "invalid command sequence at {n}"),
@@ -110,6 +127,7 @@ impl core::fmt::Display for Error {
             Self::UnsupportedManifestVersion => write!(f, "manifest version not supported"),
             Self::UnsupportedParameter(n) => write!(f, "parameter {n} not supported"),
             Self::Utf8Error(n) => write!(f, "unable to interpret bytes as string at {n}"),
+            Self::SoftConditionFailure => unreachable!(),
         }
     }
 }
