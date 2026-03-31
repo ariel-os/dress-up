@@ -419,6 +419,14 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         }
     }
 
+    fn directive_invoke(&self, state: &ManifestState, component: &Component) -> Result<(), Error> {
+        if let Some(args) = state.invoke_args {
+            self.os_hooks.invoke(component, args)
+        } else {
+            Err(Error::ParameterNotSet(0))
+        }
+    }
+
     fn decode_reporting_policy(decoder: &mut Decoder) -> Result<ReportingPolicy, Error> {
         Ok(decoder.decode::<ReportingPolicy>()?)
     }

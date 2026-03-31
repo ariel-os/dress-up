@@ -330,6 +330,15 @@ pub trait OperatingHooks {
     ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand(SuitCommand::Fetch.into()))
     }
+
+    /// Transfer execution to the current component.
+    fn invoke(
+        &self,
+        _component: &component::Component,
+        _arguments: &ByteSlice,
+    ) -> Result<(), Error> {
+        Err(Error::UnsupportedCommand(SuitCommand::Invoke.into()))
+    }
 }
 
 impl<'a, S: AuthState> SuitManifest<'a, S> {
