@@ -6,7 +6,7 @@ use minicbor::data::Token;
 use minicbor::decode::Decoder;
 
 use crate::cbor::SubCbor;
-use crate::command::{CommandSequenceExecutor, CommandSequenceIterator};
+use crate::command::CommandSequence;
 use crate::component::{ComponentInfo, ComponentIter};
 use crate::consts::SuitCommand;
 use crate::error::Error;
@@ -73,22 +73,12 @@ impl<'a, S: AuthState> Manifest<'a, S> {
         Ok(seq_no)
     }
 }
-struct Section<'a> {
-    cbor: &'a ByteSlice,
-    offset: usize,
-}
-
-impl<'a> Section<'a> {
-    fn new(cbor: &'a ByteSlice, offset: usize) -> Self {
-        Section { cbor, offset }
-    }
-}
 
 impl<'a> Manifest<'a, Authenticated> {
-    fn find_command_sequence(
+    fn find_section(
         &self,
         section: crate::consts::Manifest,
-    ) -> Result<Option<Section<'a>>, Error> {
+    ) -> Result<Option<(&'a ByteSlice, usize)>, Error> {
         let mut decoder = self.decoder.clone();
         let len = decoder
             .map()?
@@ -98,7 +88,7 @@ impl<'a> Manifest<'a, Authenticated> {
             let offset = decoder.position();
             if key == section.into() {
                 let value = decoder.bytes()?;
-                return Ok(Some(Section::new(value.into(), offset)));
+                return Ok(Some((value.into(), offset)));
             } else {
                 decoder.skip()?;
             }
@@ -106,87 +96,18 @@ impl<'a> Manifest<'a, Authenticated> {
         Ok(None)
     }
 
-    fn get_common(&self) -> Result<Section<'a>, Error> {
-        self.find_command_sequence(crate::consts::Manifest::CommonData)?
+    fn find_command_sequence(
+        &self,
+        section: crate::consts::Manifest,
+    ) -> Result<Option<CommandSequence<'a>>, Error> {
+        self.find_section(section)
+            .map(|o| o.map(|(cbor, offset)| CommandSequence::new(cbor, offset)))
+    }
+
+    fn get_common(&self) -> Result<CommonSection<'a>, Error> {
+        self.find_section(crate::consts::Manifest::CommonData)?
             .ok_or(Error::NoCommonSection)
-    }
-
-    fn component_count(&self) -> Result<usize, Error> {
-        let common_section = self.get_common()?;
-        let mut decoder = Decoder::new(common_section.cbor);
-        let len = decoder.map()?.ok_or(Error::InvalidCommonSection)?;
-        for _ in 0..len {
-            let key = decoder.i16()?;
-            if key == crate::consts::SuitCommon::ComponentIdentifiers as i16 {
-                if let Some(num_components) = decoder
-                    .array()
-                    .map_err(|e| Error::from(e).add_offset(common_section.offset))?
-                {
-                    return Ok(num_components as usize);
-                } else {
-                    return Err(Error::UnexpectedIndefiniteLength(decoder.position()))
-                        .map_err(|e| e.add_offset(common_section.offset));
-                }
-            }
-        }
-        Err(Error::InvalidCommonSection)
-    }
-
-    fn verify_components(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
-        let (components, _, common_offset) = self.decode_common()?;
-        let mut decoder = Decoder::new(components);
-        for component in
-            ComponentIter::new(&mut decoder).map_err(|e| e.add_offset(common_offset))?
-        {
-            os_hooks.has_component(&component.map_err(|e| e.add_offset(common_offset))?)?;
-        }
-        Ok(())
-    }
-
-    fn check_shared_sequence(&self) -> Result<bool, Error> {
-        // The shared sequence in the common section must contain a vendor and device class check and
-        // is not allowed to contain any custom command
-        let (_, common, common_offset) = self.decode_common()?;
-        let decoder = Decoder::new(common);
-        if !CommandSequenceIterator::new(decoder.clone())
-            .map_err(|e| e.add_offset(common_offset))?
-            .any(|cmd| cmd.is_ok_and(|c| c.command == SuitCommand::VendorIdentifier))
-        {
-            return Ok(false);
-        }
-        if !CommandSequenceIterator::new(decoder.clone())
-            .map_err(|e| e.add_offset(common_offset))?
-            .any(|cmd| cmd.is_ok_and(|c| c.command == SuitCommand::ClassIdentifier))
-        {
-            return Ok(false);
-        }
-        Ok(true)
-    }
-
-    fn decode_common(&self) -> Result<(&'a ByteSlice, &'a ByteSlice, usize), Error> {
-        let common_section = self.get_common()?;
-        // Only contains the component identifiers and the common command sequence
-        let mut decoder = Decoder::new(common_section.cbor);
-        let mut components = None;
-        let mut commands = None;
-        let len = decoder.map()?.ok_or(Error::InvalidCommonSection)?;
-        for _ in 0..len {
-            let key = decoder.i16()?;
-            match key {
-                2 => {
-                    components = Some(decoder.sub_cbor()?.into());
-                }
-                4 => {
-                    commands = Some(decoder.bytes()?.into());
-                }
-                _ => return Err(Error::InvalidCommonSection),
-            }
-        }
-        if let (Some(components), Some(commands)) = (components, commands) {
-            Ok((components, commands, common_section.offset))
-        } else {
-            Err(Error::InvalidCommonSection)
-        }
+            .and_then(|(cbor, offset)| CommonSection::new(cbor, offset))
     }
 
     fn has_section(&self, section: crate::consts::Manifest) -> Result<bool, Error> {
@@ -227,10 +148,11 @@ impl<'a> Manifest<'a, Authenticated> {
         let command_section = self
             .find_command_sequence(section)?
             .ok_or(Error::NoCommandSection(section.into()))?;
-        let (components, common, common_offset) = self.decode_common()?;
-        let mut component_decoder = Decoder::new(components);
+
+        let common = self.get_common()?;
+        let mut component_decoder = Decoder::new(common.components);
         for (idx, component) in ComponentIter::new(&mut component_decoder)
-            .map_err(|e| e.add_offset(common_offset))?
+            .map_err(|e| e.add_offset(common.component_offset))?
             .enumerate()
         {
             if let Ok(component) = component {
@@ -239,14 +161,12 @@ impl<'a> Manifest<'a, Authenticated> {
                     .map_err(|_| Error::UnexpectedCbor(self.decoder.position()))?;
                 let component_info = ComponentInfo::new(component, idx);
 
-                let common_sequence = CommandSequenceExecutor::new(common, os_hooks);
-                let state = common_sequence
-                    .process(start_state.clone(), &component_info)
-                    .map_err(|e| e.add_offset(common_offset))?;
-                let section = CommandSequenceExecutor::new(command_section.cbor, os_hooks);
-                section
-                    .process(state, &component_info)
-                    .map_err(|e| e.add_offset(command_section.offset))?;
+                let state = common.shared_sequence().execute(
+                    start_state.clone(),
+                    &component_info,
+                    os_hooks,
+                )?;
+                command_section.execute(state, &component_info, os_hooks)?;
             }
         }
         Ok(())
@@ -298,9 +218,102 @@ impl<'a> Manifest<'a, Authenticated> {
     /// Execute all command sequences in the manifest.
     pub fn execute_full(&self) -> Result<(), Error> {
         let _state = ManifestState::default();
-        let (_components, _common, _common_offset) = self.decode_common()?;
         // Separate out per component, common first, then the step
         todo!();
         Ok(())
+    }
+}
+
+struct CommonSection<'a> {
+    components: &'a ByteSlice,
+    component_offset: usize,
+    shared_sequence: CommandSequence<'a>,
+}
+
+impl<'a> CommonSection<'a> {
+    fn new(cbor: &'a ByteSlice, offset: usize) -> Result<Self, Error> {
+        let (components, component_offset, shared_sequence) = Self::decode_common(cbor, offset)?;
+        // todo: fix offset
+        Ok(Self {
+            components,
+            component_offset,
+            shared_sequence,
+        })
+    }
+
+    fn decode_common(
+        cbor: &'a ByteSlice,
+        offset: usize,
+    ) -> Result<(&'a ByteSlice, usize, CommandSequence<'a>), Error> {
+        // Only contains the component identifiers and the common command sequence
+        let mut decoder = Decoder::new(cbor);
+        let mut components = None;
+        let mut component_offset = 0;
+        let mut commands = None;
+        let len = decoder.map()?.ok_or(Error::InvalidCommonSection)?;
+        for _ in 0..len {
+            let key = decoder.i16()?;
+            match key {
+                2 => {
+                    component_offset = decoder.position();
+                    components = Some(decoder.sub_cbor()?.into());
+                }
+                4 => {
+                    let position = decoder.position() + offset;
+                    commands = Some(CommandSequence::new(decoder.bytes()?.into(), position));
+                }
+                _ => return Err(Error::InvalidCommonSection),
+            }
+        }
+        if let (Some(components), Some(commands)) = (components, commands) {
+            Ok((components, component_offset, commands))
+        } else {
+            Err(Error::InvalidCommonSection)
+        }
+    }
+
+    fn shared_sequence<'b>(&'b self) -> &'b CommandSequence<'a> {
+        &self.shared_sequence
+    }
+
+    fn component_count(&self) -> Result<usize, Error> {
+        if let Some(num_components) = Decoder::new(self.components)
+            .array()
+            .map_err(|e| Error::from(e).add_offset(self.component_offset))?
+        {
+            Ok(num_components as usize)
+        } else {
+            Err(Error::UnexpectedIndefiniteLength(self.component_offset))
+        }
+    }
+
+    fn verify_components(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        let mut decoder = Decoder::new(self.components);
+        for component in
+            ComponentIter::new(&mut decoder).map_err(|e| e.add_offset(self.component_offset))?
+        {
+            os_hooks.has_component(&component.map_err(|e| e.add_offset(self.component_offset))?)?;
+        }
+        Ok(())
+    }
+
+    fn verify_shared_sequence(&self) -> Result<bool, Error> {
+        // The shared sequence in the common section must contain a vendor and device class check and
+        // is not allowed to contain any custom command
+        if !self
+            .shared_sequence
+            .iter()?
+            .any(|cmd| cmd.is_ok_and(|c| c.command == SuitCommand::VendorIdentifier))
+        {
+            return Ok(false);
+        }
+        if !self
+            .shared_sequence
+            .iter()?
+            .any(|cmd| cmd.is_ok_and(|c| c.command == SuitCommand::VendorIdentifier))
+        {
+            return Ok(false);
+        }
+        Ok(true)
     }
 }
