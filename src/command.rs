@@ -51,7 +51,9 @@ impl<'a> Command<'a> {
         {
             return Ok(decoder);
         }
-        Err(Error::InvalidCommandSequence(0))
+        Err(Error::InvalidCommandSequence {
+            position: self.position,
+        })
     }
 
     fn get_argument_offset(&self) -> usize {
@@ -66,7 +68,9 @@ impl<'a> Command<'a> {
         if let CommandArgument::Report(policy) = self.argument {
             return Ok(policy);
         }
-        Err(Error::InvalidCommandSequence(0))
+        Err(Error::InvalidCommandSequence {
+            position: self.position,
+        })
     }
 }
 
@@ -90,8 +94,16 @@ impl<'a> CommandSequenceIterator<'a> {
     fn enter_sequence(decoder: &mut Decoder) -> Result<u64, Error> {
         let length = decoder.array()?;
         let length = match length {
-            Some(n) if n % 2 == 1 => return Err(Error::InvalidCommandSequence(decoder.position())),
-            None => return Err(Error::InvalidCommandSequence(decoder.position())),
+            Some(n) if n % 2 == 1 => {
+                return Err(Error::InvalidCommandSequence {
+                    position: decoder.position(),
+                })
+            }
+            None => {
+                return Err(Error::InvalidCommandSequence {
+                    position: decoder.position(),
+                })
+            }
             Some(n) => n / 2,
         };
         Ok(length)
@@ -199,18 +211,21 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 return Ok(());
             }
             // Bail out on any error except the ConditionMatchFail
-            if !matches!(res, Err(Error::ConditionMatchFail(_))) {
+            if !matches!(res, Err(Error::ConditionMatchFail { .. })) {
                 return res.map(|_| ());
             }
         }
-        Err(Error::TryEachFail(decoder.position()))
+        Err(Error::TryEachFail {
+            position: decoder.position(),
+        })
     }
 
     fn enter_sequence(decoder: &mut Decoder) -> Result<u64, Error> {
+        let position = decoder.position();
         let length = decoder.array()?;
         let length = match length {
-            Some(n) if n % 2 == 1 => return Err(Error::InvalidCommandSequence(decoder.position())),
-            None => return Err(Error::InvalidCommandSequence(decoder.position())),
+            Some(n) if n % 2 == 1 => return Err(Error::InvalidCommandSequence { position }),
+            None => return Err(Error::InvalidCommandSequence { position }),
             Some(n) => n / 2,
         };
         Ok(length)
@@ -239,9 +254,15 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
             } else {
                 match command.command {
                     SuitCommand::Unset => {
-                        return Err(Error::UnsupportedCommand(command.command.into()))
+                        return Err(Error::UnsupportedCommand {
+                            command: command.command.into(),
+                        })
                     }
-                    SuitCommand::Abort => return Err(Error::ConditionMatchFail(command.position)),
+                    SuitCommand::Abort => {
+                        return Err(Error::ConditionMatchFail {
+                            position: command.position,
+                        })
+                    }
                     SuitCommand::OverrideParameters => {
                         let mut argument = command.get_argument_cbor()?.clone();
                         state
@@ -263,7 +284,9 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     SuitCommand::ComponentSlot => {
                         self.cond_component_slot(&state, component.component())?;
                     }
-                    SuitCommand::Copy => Err(Error::UnsupportedCommand(SuitCommand::Copy.into()))?,
+                    SuitCommand::Copy => Err(Error::UnsupportedCommand {
+                        command: SuitCommand::Copy.into(),
+                    })?,
                     SuitCommand::DeviceIdentifier => {
                         self.cond_device_identifier(&state, component.component())?;
                     }
@@ -275,15 +298,15 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                         self.cond_image_match(&state, component.component())?;
                     }
 
-                    SuitCommand::Invoke => {
-                        Err(Error::UnsupportedCommand(SuitCommand::Invoke.into()))?
-                    }
-                    SuitCommand::RunSequence => {
-                        Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
-                    }
-                    SuitCommand::Swap => {
-                        Err(Error::UnsupportedCommand(SuitCommand::RunSequence.into()))?
-                    }
+                    SuitCommand::Invoke => Err(Error::UnsupportedCommand {
+                        command: SuitCommand::Invoke.into(),
+                    })?,
+                    SuitCommand::RunSequence => Err(Error::UnsupportedCommand {
+                        command: SuitCommand::RunSequence.into(),
+                    })?,
+                    SuitCommand::Swap => Err(Error::UnsupportedCommand {
+                        command: SuitCommand::RunSequence.into(),
+                    })?,
                     SuitCommand::TryEach => {
                         let mut argument = command.get_argument_cbor()?.clone();
                         self.try_each(&mut state, component, &mut argument)
@@ -314,11 +337,11 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail(0))
+                        Err(Error::ConditionMatchFail { position: 0 })
                     }
                 })
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -334,11 +357,11 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail(0))
+                        Err(Error::ConditionMatchFail { position: 0 })
                     }
                 })
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -354,11 +377,11 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail(0))
+                        Err(Error::ConditionMatchFail { position: 0 })
                     }
                 })
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -374,11 +397,11 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail(0))
+                        Err(Error::ConditionMatchFail { position: 0 })
                     }
                 })
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -390,7 +413,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         if let Some(content) = &state.content {
             let size = self.os_hooks.component_size(component)?;
             if size != content.len() {
-                return Err(Error::ConditionMatchFail(0));
+                return Err(Error::ConditionMatchFail { position: 0 });
             }
             let mut choice = Choice::TRUE;
             let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
@@ -402,16 +425,16 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     .component_read(component, state.component_slot, offset, buf)?;
                 let manifest_content = content
                     .get(offset..(offset + read_size))
-                    .ok_or(Error::ConditionMatchFail(0))?;
+                    .ok_or(Error::ConditionMatchFail { position: 0 })?;
                 choice = choice.and(manifest_content.ct_eq(buf));
             }
             if choice.to_bool() {
                 Ok(())
             } else {
-                Err(Error::ConditionMatchFail(0))
+                Err(Error::ConditionMatchFail { position: 0 })
             }
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -432,11 +455,11 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 if b {
                     Ok(())
                 } else {
-                    Err(Error::ConditionMatchFail(0))
+                    Err(Error::ConditionMatchFail { position: 0 })
                 }
             })
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -444,7 +467,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         if let Some(uri) = state.uri {
             self.os_hooks.fetch(component, state.component_slot, uri)
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -453,7 +476,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
             self.os_hooks
                 .component_write(component, state.component_slot, 0, content)
         } else {
-            Err(Error::ParameterNotSet(0))
+            Err(Error::ParameterNotSet { position: 0 })
         }
     }
 
@@ -515,7 +538,7 @@ mod tests {
             bytes: &mut [u8],
         ) -> Result<(), Error> {
             if bytes.len() + offset > self.buf.get().len() {
-                return Err(Error::InvalidCommandSequence(0));
+                return Err(Error::InvalidCommandSequence { position: 0 });
             }
             bytes.copy_from_slice(&self.buf.get()[offset..offset + bytes.len()]);
             Ok(())
@@ -529,7 +552,7 @@ mod tests {
             bytes: &[u8],
         ) -> Result<(), Error> {
             if bytes.len() + offset > self.buf.get().len() {
-                return Err(Error::InvalidCommandSequence(0));
+                return Err(Error::InvalidCommandSequence { position: 0 });
             }
             let mut buf = self.buf.get();
             buf[offset..offset + bytes.len()].copy_from_slice(bytes);
@@ -579,7 +602,7 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::InvalidCommandSequence(1));
+        assert_eq!(res, Error::InvalidCommandSequence { position: 1 });
     }
 
     #[test]
@@ -591,7 +614,7 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::InvalidCommandSequence(1));
+        assert_eq!(res, Error::InvalidCommandSequence { position: 1 });
     }
 
     #[test]
@@ -603,7 +626,7 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state.clone(), &info).unwrap_err();
-        assert_eq!(res, Error::UnsupportedCommand(0));
+        assert_eq!(res, Error::UnsupportedCommand { command: 0 });
     }
 
     #[test]
@@ -696,7 +719,7 @@ mod tests {
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let res = sequence.process(state.clone(), &info).unwrap_err();
-        assert_eq!(res, Error::TryEachFail(7));
+        assert_eq!(res, Error::TryEachFail { position: 7 });
     }
 
     #[test]
@@ -711,7 +734,7 @@ mod tests {
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let res = sequence.process(state.clone(), &info).unwrap_err();
-        assert_eq!(res, Error::UnsupportedParameter(0));
+        assert_eq!(res, Error::UnsupportedParameter { parameter: 0 });
     }
 
     #[test]

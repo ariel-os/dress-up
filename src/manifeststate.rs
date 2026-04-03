@@ -97,9 +97,9 @@ impl<'a> ManifestState<'a> {
 
     pub(crate) fn image_size_from_cbor(&mut self, decoder: &mut Decoder) -> Result<(), Error> {
         let size = decoder.u64()?;
-        let size: usize = size
-            .try_into()
-            .map_err(|_| Error::UnexpectedCbor(decoder.position()))?;
+        let size: usize = size.try_into().map_err(|_| Error::UnexpectedCbor {
+            position: decoder.position(),
+        })?;
         self.set_image_size(size);
         Ok(())
     }
@@ -115,8 +115,9 @@ impl<'a> ManifestState<'a> {
     }
 
     pub(crate) fn update_parameter(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
+        let position = decoder.position();
         let length = decoder.map()?;
-        let length = length.ok_or(Error::UnexpectedIndefiniteLength(decoder.position()))?;
+        let length = length.ok_or(Error::UnexpectedIndefiniteLength { position })?;
         for _ in 0..length {
             let param: SuitParameter = decoder.i32()?.try_into()?;
             match param {
@@ -129,7 +130,11 @@ impl<'a> ManifestState<'a> {
                 SuitParameter::SourceComponent => todo!(),
                 SuitParameter::DeviceId => self.device_id_from_cbor(decoder)?,
                 SuitParameter::Content => self.content_from_cbor(decoder)?,
-                param => return Err(Error::UnsupportedParameter(param.into())),
+                param => {
+                    return Err(Error::UnsupportedParameter {
+                        parameter: param.into(),
+                    })
+                }
             };
         }
         Ok(())
@@ -157,7 +162,10 @@ mod tests {
         let mut params = ManifestState::default();
         let mut decoder = Decoder::new(&input);
         let err = params.update_parameter(&mut decoder);
-        assert_eq!(err.unwrap_err(), Error::UnsupportedParameter(0));
+        assert_eq!(
+            err.unwrap_err(),
+            Error::UnsupportedParameter { parameter: 0 }
+        );
     }
 
     #[test]

@@ -166,7 +166,7 @@ impl TryFrom<i32> for SuitParameter {
             22 => Self::SourceComponent,
             23 => Self::InvokeArgs,
             24 => Self::DeviceId,
-            n => return Err(Self::Error::UnsupportedParameter(n)),
+            n => return Err(Self::Error::UnsupportedParameter { parameter: n }),
         })
     }
 }

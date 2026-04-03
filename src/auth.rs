@@ -20,7 +20,9 @@ impl<'a> Authentication<'a> {
     pub(crate) fn new(authentication: &'a ByteSlice, manifest: &ByteSlice) -> Result<Self, Error> {
         let mut decoder = Decoder::new(authentication);
         let len = decoder.array()?;
-        let len = len.ok_or(Error::UnexpectedIndefiniteLength(decoder.position()))?;
+        let len = len.ok_or(Error::UnexpectedIndefiniteLength {
+            position: decoder.position(),
+        })?;
 
         // Structure must contain at least one suit_digest and one COSE auth
         if len < 2 {

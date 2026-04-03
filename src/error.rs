@@ -16,15 +16,24 @@ pub enum Error {
     /// SUIT Condition match failure.
     ///
     /// Returned when a SUIT command condition did not match the expected.
-    ConditionMatchFail(usize),
+    ConditionMatchFail {
+        /// Position of the condition match failure in the manifest.
+        position: usize,
+    },
     /// SUIT Try Each command sequence failed every sequence.
-    TryEachFail(usize),
+    TryEachFail {
+        /// Position of the try each command failure in the manifest.
+        position: usize,
+    },
     /// Unexpected end of the CBOR input.
     EndOfInput,
     /// Authentication structure is not valid.
     InvalidAuthenticationStructure,
     /// Invalid command sequence.
-    InvalidCommandSequence(usize),
+    InvalidCommandSequence {
+        /// Position of the command sequence parsing failure in the manifest.
+        position: usize,
+    },
     /// Invalid common section.
     InvalidCommonSection,
     /// No authentication object found inside the SUIT envelope.
@@ -32,48 +41,87 @@ pub enum Error {
     /// No common section found inside the SUIT manifest.
     NoCommonSection,
     /// Missing command section inside the SUIT manifest.
-    NoCommandSection(i16),
+    NoCommandSection {
+        /// The missing section number.
+        section: i16,
+    },
     /// No component list inside the SUIT common section
     NoComponentList,
     /// No manifest object found inside the SUIT envelope.
     NoManifestObject,
     /// Parameter required for the condition is not set.
-    ParameterNotSet(usize),
+    ParameterNotSet {
+        /// Position of the command for which the parameter is not set in the manifest.
+        position: usize,
+    },
     /// CBOR element type at location is unexpected.
-    UnexpectedCbor(usize),
+    UnexpectedCbor {
+        /// Position of the unexpected CBOR element.
+        position: usize,
+    },
     /// CBOR array or map is of indefinite length where it is not allowed.
-    UnexpectedIndefiniteLength(usize),
+    UnexpectedIndefiniteLength {
+        /// Position of the indefinite length CBOR element in the manifest.
+        position: usize,
+    },
     /// SUIT Command is not supported by the processor.
-    UnsupportedCommand(i32),
+    UnsupportedCommand {
+        /// The unsupported command number.
+        command: i32,
+    },
     /// SUIT component identifier is not supported by the processor.
-    UnsupportedComponentIdentifier(i64),
+    UnsupportedComponentIdentifier {
+        /// The identifier of the component that is not supported.
+        identifier: i64,
+    },
     /// SUIT digest algorithm is not supported by the processor.
-    UnsupportedDigestAlgo(i64),
+    UnsupportedDigestAlgo {
+        /// The algorithm number.
+        algorithm: i64,
+    },
     /// SUIT manifest version number is not supported by the processor.
     UnsupportedManifestVersion,
     /// SUIT parameter is not supported by the processor.
-    UnsupportedParameter(i32),
+    UnsupportedParameter {
+        /// The parameter number.
+        parameter: i32,
+    },
     /// UTF-8 error while decoding the component identifier.
-    Utf8Error(usize),
+    Utf8Error {
+        /// Position of the UTF-8 decoding error in the manifest.
+        position: usize,
+    },
 }
 
 impl Error {
     pub(crate) fn digest_algo_error(value: i64) -> Self {
-        Error::UnsupportedDigestAlgo(value)
+        Error::UnsupportedDigestAlgo { algorithm: value }
     }
 
     /// Use to modify error position on bytes-string wrapped CBOR
     pub(crate) fn add_offset(self, offset: usize) -> Self {
         match self {
-            Error::ConditionMatchFail(pos) => Error::ConditionMatchFail(pos + offset),
-            Error::TryEachFail(pos) => Error::TryEachFail(pos + offset),
-            Error::InvalidCommandSequence(pos) => Error::InvalidCommandSequence(pos + offset),
-            Error::ParameterNotSet(pos) => Error::ParameterNotSet(pos + offset),
-            Error::UnexpectedCbor(pos) => Error::UnexpectedCbor(pos + offset),
-            Error::UnexpectedIndefiniteLength(pos) => {
-                Error::UnexpectedIndefiniteLength(pos + offset)
-            }
-            Error::Utf8Error(pos) => Error::Utf8Error(pos + offset),
+            Error::ConditionMatchFail { position } => Error::ConditionMatchFail {
+                position: position + offset,
+            },
+            Error::TryEachFail { position } => Error::TryEachFail {
+                position: position + offset,
+            },
+            Error::InvalidCommandSequence { position } => Error::InvalidCommandSequence {
+                position: position + offset,
+            },
+            Error::ParameterNotSet { position } => Error::ParameterNotSet {
+                position: position + offset,
+            },
+            Error::UnexpectedCbor { position } => Error::UnexpectedCbor {
+                position: position + offset,
+            },
+            Error::UnexpectedIndefiniteLength { position } => Error::UnexpectedIndefiniteLength {
+                position: position + offset,
+            },
+            Error::Utf8Error { position } => Error::Utf8Error {
+                position: position + offset,
+            },
             e => e,
         }
     }
@@ -84,32 +132,45 @@ impl core::fmt::Display for Error {
         match self {
             Self::AuthenticationFailure => write!(f, "authentication of manifest failed"),
             Self::CapacityError => write!(f, "string capacity exhausted"),
-            Self::ConditionMatchFail(pos) => write!(f, "condition mismatch at {pos}"),
-            Self::TryEachFail(pos) => write!(f, "try each sequence failed at {pos}"),
+            Self::ConditionMatchFail { position } => write!(f, "condition mismatch at {position}"),
+            Self::TryEachFail { position } => write!(f, "try each sequence failed at {position}"),
             Self::EndOfInput => write!(f, "end of CBOR input"),
             Self::InvalidAuthenticationStructure => write!(f, "invalide authentication structure"),
-            Self::InvalidCommandSequence(n) => write!(f, "invalid command sequence at {n}"),
+            Self::InvalidCommandSequence { position } => {
+                write!(f, "invalid command sequence at {position}")
+            }
             Self::InvalidCommonSection => write!(f, "invalid common section found in manifest"),
             Self::NoAuthObject => write!(f, "no Authentication object in manifest"),
             Self::NoCommonSection => write!(f, "no common section found in manifest"),
-            Self::NoCommandSection(n) => write!(f, "no command sequence {n} found in manifest"),
+            Self::NoCommandSection { section } => {
+                write!(f, "no command sequence {section} found in manifest")
+            }
             Self::NoComponentList => write!(f, "no component list found in manifest"),
             Self::NoManifestObject => write!(f, "no Manifest object in manifest"),
-            Self::ParameterNotSet(n) => {
-                write!(f, "parameter required for condition at {n} not set")
+            Self::ParameterNotSet { position } => {
+                write!(f, "parameter required for condition at {position} not set")
             }
-            Self::UnexpectedCbor(pos) => write!(f, "unexpected CBOR found at {pos}"),
-            Self::UnexpectedIndefiniteLength(n) => {
-                write!(f, "unexpected indefinite length cbor container at {n}")
+            Self::UnexpectedCbor { position } => write!(f, "unexpected CBOR found at {position}"),
+            Self::UnexpectedIndefiniteLength { position } => {
+                write!(
+                    f,
+                    "unexpected indefinite length cbor container at {position}"
+                )
             }
-            Self::UnsupportedCommand(n) => write!(f, "command {n} not supported"),
-            Self::UnsupportedComponentIdentifier(n) => {
-                write!(f, "component identifier {n} not supported")
+            Self::UnsupportedCommand { command } => write!(f, "command {command} not supported"),
+            Self::UnsupportedComponentIdentifier { identifier } => {
+                write!(f, "component identifier {identifier} not supported")
             }
-            Self::UnsupportedDigestAlgo(n) => write!(f, "digest algorithm {n} not supported"),
+            Self::UnsupportedDigestAlgo { algorithm } => {
+                write!(f, "digest algorithm {algorithm} not supported")
+            }
             Self::UnsupportedManifestVersion => write!(f, "manifest version not supported"),
-            Self::UnsupportedParameter(n) => write!(f, "parameter {n} not supported"),
-            Self::Utf8Error(n) => write!(f, "unable to interpret bytes as string at {n}"),
+            Self::UnsupportedParameter { parameter } => {
+                write!(f, "parameter {parameter} not supported")
+            }
+            Self::Utf8Error { position } => {
+                write!(f, "unable to interpret bytes as string at {position}")
+            }
         }
     }
 }
@@ -121,8 +182,8 @@ impl From<minicbor::decode::Error> for Error {
         if err.is_end_of_input() {
             Self::EndOfInput
         } else {
-            let pos = err.position().unwrap_or(0);
-            Self::UnexpectedCbor(pos)
+            let position = err.position().unwrap_or(0);
+            Self::UnexpectedCbor { position }
         }
     }
 }

@@ -26,7 +26,7 @@ fn try_into_u64(token: Token) -> Result<u64, Error> {
         Token::U16(n) => Ok(n.into()),
         Token::U32(n) => Ok(n.into()),
         Token::U64(n) => Ok(n),
-        _ => Err(Error::UnexpectedCbor(0)),
+        _ => Err(Error::UnexpectedCbor { position: 0 }),
     }
 }
 
@@ -80,9 +80,9 @@ impl<'a> Manifest<'a, Authenticated> {
         section: crate::consts::Manifest,
     ) -> Result<Option<(&'a ByteSlice, usize)>, Error> {
         let mut decoder = self.decoder.clone();
-        let len = decoder
-            .map()?
-            .ok_or(Error::UnexpectedCbor(decoder.position()))?;
+        let len = decoder.map()?.ok_or(Error::UnexpectedCbor {
+            position: decoder.position(),
+        })?;
         for _ in 0..len {
             let key = decoder.i16()?;
             let offset = decoder.position();
@@ -145,9 +145,11 @@ impl<'a> Manifest<'a, Authenticated> {
         section: crate::consts::Manifest,
     ) -> Result<(), Error> {
         let start_state = ManifestState::default();
-        let command_section = self
-            .find_command_sequence(section)?
-            .ok_or(Error::NoCommandSection(section.into()))?;
+        let command_section =
+            self.find_command_sequence(section)?
+                .ok_or(Error::NoCommandSection {
+                    section: section.into(),
+                })?;
 
         let common = self.get_common()?;
         let mut component_decoder = Decoder::new(common.components);
@@ -156,9 +158,9 @@ impl<'a> Manifest<'a, Authenticated> {
             .enumerate()
         {
             if let Ok(component) = component {
-                let idx = idx
-                    .try_into()
-                    .map_err(|_| Error::UnexpectedCbor(self.decoder.position()))?;
+                let idx = idx.try_into().map_err(|_| Error::UnexpectedCbor {
+                    position: self.decoder.position(),
+                })?;
                 let component_info = ComponentInfo::new(component, idx);
 
                 let state = common.shared_sequence().execute(
@@ -283,7 +285,9 @@ impl<'a> CommonSection<'a> {
         {
             Ok(num_components as usize)
         } else {
-            Err(Error::UnexpectedIndefiniteLength(self.component_offset))
+            Err(Error::UnexpectedIndefiniteLength {
+                position: self.component_offset,
+            })
         }
     }
 

@@ -76,7 +76,7 @@ impl<'a> SuitDigest<'a> {
                 digest.finalize_xof_into(&mut output);
                 Ok(**self.digest == output)
             }
-            (_, _) => Err(Error::ConditionMatchFail(0)),
+            (_, _) => Err(Error::ConditionMatchFail { position: 0 }),
         }
     }
 }
@@ -271,7 +271,7 @@ mod tests {
         digest.algo = SuitDigestAlgorithm::Sha384; // Don't do this!
         assert_eq!(
             digest.match_hasher(hasher),
-            Err(Error::ConditionMatchFail(0))
+            Err(Error::ConditionMatchFail { position: 0 })
         );
     }
 

@@ -56,7 +56,9 @@ impl<'a> Component<'a> {
         decoder
             .array_iter::<&ByteSlice>()?
             .map(|b| match b {
-                Ok(b) => str::from_utf8(b).map_err(|e| Error::Utf8Error(e.valid_up_to())),
+                Ok(b) => str::from_utf8(b).map_err(|e| Error::Utf8Error {
+                    position: e.valid_up_to(),
+                }),
                 Err(e) => Err(e.into()),
             })
             .intersperse(Ok(separator))
@@ -101,12 +103,13 @@ impl<'a> ComponentInfo<'a> {
     }
 
     pub(crate) fn in_applylist(&self, decoder: &mut Decoder) -> Result<bool, Error> {
+        let position = decoder.position();
         match decoder.datatype()? {
             minicbor::data::Type::Bool => {
                 if decoder.bool()? {
                     Ok(true)
                 } else {
-                    Err(Error::UnexpectedCbor(decoder.position()))
+                    Err(Error::UnexpectedCbor { position })
                 }
             }
             minicbor::data::Type::U8 | minicbor::data::Type::U16 | minicbor::data::Type::U32 => {
@@ -115,7 +118,7 @@ impl<'a> ComponentInfo<'a> {
             minicbor::data::Type::Array => Ok(decoder
                 .array_iter::<u32>()?
                 .any(|x| x.is_ok_and(|i| i == self.index))),
-            _ => Err(Error::UnexpectedCbor(decoder.position())),
+            _ => Err(Error::UnexpectedCbor { position }),
         }
     }
 }

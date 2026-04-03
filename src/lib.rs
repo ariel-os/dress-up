@@ -273,9 +273,9 @@ pub trait OperatingHooks {
         _uuid: Uuid,
         _component: &component::Component,
     ) -> Result<bool, Error> {
-        Err(Error::UnsupportedCommand(
-            SuitCommand::DeviceIdentifier.into(),
-        ))
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::DeviceIdentifier.into(),
+        })
     }
 
     /// Verify that the component slot index of the supplied component is valid
@@ -287,9 +287,9 @@ pub trait OperatingHooks {
         _component: &component::Component,
         _component_slot: u64,
     ) -> Result<bool, Error> {
-        Err(Error::UnsupportedCommand(
-            SuitCommand::DeviceIdentifier.into(),
-        ))
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::DeviceIdentifier.into(),
+        })
     }
 
     /// Read the data from a component (with slot) into the supplied buffer.
@@ -328,7 +328,9 @@ pub trait OperatingHooks {
         _slot: Option<u64>,
         _uri: &str,
     ) -> Result<(), Error> {
-        Err(Error::UnsupportedCommand(SuitCommand::Fetch.into()))
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::Fetch.into(),
+        })
     }
 }
 
@@ -336,9 +338,10 @@ impl<'a, S: AuthState> SuitManifest<'a, S> {
     /// Retrieve the envelope of the manifest.
     pub fn envelope(&self) -> Result<Envelope<'a, S>, Error> {
         let mut decoder = self.decoder.clone();
+        let position = decoder.position();
         let tag = decoder.tag()?;
         if tag != SUIT_TAG_ENVELOPE {
-            return Err(Error::UnexpectedCbor(self.decoder.position()));
+            return Err(Error::UnexpectedCbor { position });
         }
         Ok(Envelope {
             decoder,
@@ -404,9 +407,8 @@ impl<'a, S: AuthState> Envelope<'a, S> {
 
     fn get_object_wrapped(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
         let mut decoder = self.decoder.clone();
-        let len = decoder
-            .map()?
-            .ok_or(Error::UnexpectedCbor(decoder.position()))?;
+        let position = decoder.position();
+        let len = decoder.map()?.ok_or(Error::UnexpectedCbor { position })?;
         for _ in 0..len {
             let key = decoder.i16()?;
             if key == search_key.into() {
