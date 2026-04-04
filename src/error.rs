@@ -39,6 +39,10 @@ pub enum Error {
     NoManifestObject,
     /// Parameter required for the condition is not set.
     ParameterNotSet(usize),
+    /// Source and target component are the same in the copy directive.
+    SameSourceAndTarget(u32),
+    /// Source component doesn't exists in the component list.
+    InvalidSourceComponent(u32),
     /// CBOR element type at location is unexpected.
     UnexpectedCbor(usize),
     /// CBOR array or map is of indefinite length where it is not allowed.
@@ -97,6 +101,18 @@ impl core::fmt::Display for Error {
             Self::NoManifestObject => write!(f, "no Manifest object in manifest"),
             Self::ParameterNotSet(n) => {
                 write!(f, "parameter required for condition at {n} not set")
+            }
+            Self::SameSourceAndTarget(n) => {
+                write!(
+                    f,
+                    "source component at index {n} is the same than target in copy directive"
+                )
+            }
+            Self::InvalidSourceComponent(n) => {
+                write!(
+                    f,
+                    "source component index {n} not found in the component list"
+                )
             }
             Self::UnexpectedCbor(pos) => write!(f, "unexpected CBOR found at {pos}"),
             Self::UnexpectedIndefiniteLength(n) => {

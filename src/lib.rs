@@ -330,6 +330,15 @@ pub trait OperatingHooks {
     ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand(SuitCommand::Fetch.into()))
     }
+
+    /// Swap the the payload between two component.
+    fn swap(
+        &self,
+        _component: &component::Component,
+        _other: &component::Component,
+    ) -> Result<(), Error> {
+        Err(Error::UnsupportedCommand(SuitCommand::Swap.into()))
+    }
 }
 
 impl<'a, S: AuthState> SuitManifest<'a, S> {

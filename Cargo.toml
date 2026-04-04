@@ -6,6 +6,10 @@ description = "`no-std` SUIT manifest parser"
 license = "MIT OR Apache-2.0"
 categories = ["no-std"]
 
+[features]
+default = []
+built-in-swap = []
+
 [dependencies]
 ctutils = "0.4.0"
 digest = { version = "0.10.7", default-features = false }
