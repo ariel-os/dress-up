@@ -92,18 +92,11 @@ impl<'a> CommandSequenceIterator<'a> {
     }
 
     fn enter_sequence(decoder: &mut Decoder) -> Result<u64, Error> {
+        let position = decoder.position();
         let length = decoder.array()?;
         let length = match length {
-            Some(n) if n % 2 == 1 => {
-                return Err(Error::InvalidCommandSequence {
-                    position: decoder.position(),
-                })
-            }
-            None => {
-                return Err(Error::InvalidCommandSequence {
-                    position: decoder.position(),
-                })
-            }
+            Some(n) if n % 2 == 1 => return Err(Error::InvalidCommandSequence { position }),
+            None => return Err(Error::InvalidCommandSequence { position }),
             Some(n) => n / 2,
         };
         Ok(length)
@@ -602,7 +595,7 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::InvalidCommandSequence { position: 1 });
+        assert_eq!(res, Error::InvalidCommandSequence { position: 0 });
     }
 
     #[test]
@@ -614,7 +607,7 @@ mod tests {
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::InvalidCommandSequence { position: 1 });
+        assert_eq!(res, Error::InvalidCommandSequence { position: 0 });
     }
 
     #[test]
