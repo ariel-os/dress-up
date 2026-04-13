@@ -192,6 +192,8 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         component_info: &'a ComponentInfo<'a>,
         decoder: &mut Decoder<'a>,
     ) -> Result<(), Error> {
+        let mut err_position = 0;
+        let input = decoder.input();
         for sequence in decoder.array_iter::<&ByteSlice>()? {
             let sequence = sequence?;
             if sequence.is_empty() {
@@ -202,17 +204,26 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 component_info,
                 self.os_hooks,
             );
-            if let Ok(res) = res {
-                *state = res;
-                return Ok(());
-            }
-            // Bail out on any error except the ConditionMatchFail
-            if !matches!(res, Err(Error::ConditionMatchFail { .. })) {
-                return res.map(|_| ());
+            match res {
+                Ok(res) => {
+                    *state = res;
+                    return Ok(());
+                }
+                Err(Error::ConditionMatchFail { position }) => {
+                    // This requires pointer arithmetic (via element_offset) because offsets get
+                    // lost during bytestring wrapping
+                    if let Some(element) = sequence.get(position) {
+                        if let Some(position) = input.element_offset(element) {
+                            err_position = position;
+                        }
+                    }
+                }
+                Err(err) => return Err(err),
             }
         }
+        // use the last failed condition as position
         Err(Error::TryEachFail {
-            position: decoder.position(),
+            position: err_position,
         })
     }
 
@@ -277,7 +288,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                         self.cond_check_content(&state, component)?;
                     }
                     SuitCommand::ClassIdentifier => {
-                        self.cond_class_identifier(&state, component)?;
+                        self.cond_class_identifier(&state, component)?
                     }
                     SuitCommand::ComponentSlot => {
                         self.cond_component_slot(&state, component)?;
@@ -716,8 +727,8 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state.clone(), &info).unwrap_err();
-        assert_eq!(res, Error::TryEachFail { position: 7 });
+        let res = sequence.process(state, &info).unwrap_err();
+        assert_eq!(res, Error::TryEachFail { position: 5 });
     }
 
     #[test]
