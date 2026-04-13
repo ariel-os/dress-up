@@ -245,6 +245,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     }
                 }
             } else {
+                let argument_offset = command.get_argument_offset();
                 match command.command {
                     SuitCommand::Unset => {
                         return Err(Error::UnsupportedCommand {
@@ -260,12 +261,12 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                         let mut argument = command.get_argument_cbor()?.clone();
                         state
                             .update_parameter(&mut argument)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
+                            .map_err(|e| e.add_offset(argument_offset))?;
                     }
                     SuitCommand::SetComponentIndex => {
                         match_component = component
                             .in_applylist(command.get_argument_cbor()?)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
+                            .map_err(|e| e.add_offset(argument_offset))?;
                     }
                     SuitCommand::CheckContent => {
                         // byte by byte check
@@ -303,7 +304,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     SuitCommand::TryEach => {
                         let mut argument = command.get_argument_cbor()?.clone();
                         self.try_each(&mut state, component, &mut argument)
-                            .map_err(|e| e.add_offset(command.get_argument_offset()))?;
+                            .map_err(|e| e.add_offset(argument_offset))?;
                     }
                     SuitCommand::VendorIdentifier => {
                         self.cond_vendor_identifier(&state, component.component())?;
