@@ -3,8 +3,11 @@ name = "dress-up"
 version = "0.1.0"
 edition = "2021"
 description = "`no-std` SUIT manifest parser"
+homepage = "https://github.com/ariel-os/dress-up/"
+repository = "https://github.com/ariel-os/dress-up/"
 license = "MIT OR Apache-2.0"
-categories = ["no-std"]
+keywords = ["suit", "updates", "cbor"]
+categories = ["embedded", "no-std"]
 
 [dependencies]
 ctutils = "0.4.0"
