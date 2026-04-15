@@ -10,8 +10,6 @@ Dress‑Up is OS-agnostic, it provides an `OperatingHooks` trait
 that allow an operating system to provide integration into the manifest processing.
 While Dress‑Up is developed under the Ariel OS banner, it is not tied to Ariel OS.
 
-🚧 This crate is still under heavy construction 🚧
-
 The full manifest must be in memory during parsing.
 The authentication object covers the inner manifest.
 Both must be in memory for the authentication process.

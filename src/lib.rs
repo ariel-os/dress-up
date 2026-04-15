@@ -11,8 +11,6 @@
 //! to provide integration into the manifest processing.
 //! While Dress‑Up is developed under the Ariel OS banner, it is not tied to Ariel OS.
 //!
-//! 🚧 This crate is still under heavy construction 🚧
-//!
 //! The full manifest must be in memory during parsing. The authentication object covers the inner
 //! manifest. Both must be in memory for the authentication process. The other reason is that
 //! Dress‑Up is zero-copy. All text and byte strings are references into the CBOR data.
