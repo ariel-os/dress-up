@@ -6,9 +6,6 @@ use uuid::{uuid, Uuid};
 
 use dress_up::{error::Error, OperatingHooks, SuitManifest};
 
-// Real applications have to retrieve this from persistent storage
-const STORED_SEQUENCE: u32 = 500;
-
 #[derive(Parser, Debug)]
 struct Args {
     manifest: PathBuf,
@@ -42,7 +39,7 @@ impl<'a> OperatingHooks for OsHooks<'a> {
     fn match_vendor_id(
         &self,
         uuid: Uuid,
-        component: &dress_up::component::Component,
+        _component: &dress_up::component::Component,
     ) -> Result<bool, dress_up::error::Error> {
         Ok(self.vendor_id == uuid)
     }
@@ -50,22 +47,22 @@ impl<'a> OperatingHooks for OsHooks<'a> {
     fn match_class_id(
         &self,
         uuid: Uuid,
-        component: &dress_up::component::Component,
+        _component: &dress_up::component::Component,
     ) -> Result<bool, dress_up::error::Error> {
         Ok(self.class_id == uuid)
     }
 
     fn component_read(
         &self,
-        component: &dress_up::component::Component,
-        slot: Option<u64>,
+        _component: &dress_up::component::Component,
+        _slot: Option<u64>,
         offset: usize,
         bytes: &mut [u8],
     ) -> Result<(), dress_up::error::Error> {
         let storage = self.storage.take();
         if bytes.len() + offset > storage.len() {
             self.storage.set(storage);
-            return Err(Error::InvalidCommandSequence(0));
+            return Err(Error::InvalidCommandSequence { position: 0 });
         }
         bytes.copy_from_slice(&storage[offset..offset + bytes.len()]);
         self.storage.set(storage);
@@ -74,17 +71,17 @@ impl<'a> OperatingHooks for OsHooks<'a> {
 
     fn component_write(
         &self,
-        component: &dress_up::component::Component,
-        slot: Option<u64>,
-        offset: usize,
-        bytes: &[u8],
+        _component: &dress_up::component::Component,
+        _slot: Option<u64>,
+        _offset: usize,
+        _bytes: &[u8],
     ) -> Result<(), dress_up::error::Error> {
         todo!()
     }
 
     fn component_size(
         &self,
-        component: &dress_up::component::Component,
+        _component: &dress_up::component::Component,
     ) -> Result<usize, dress_up::error::Error> {
         let storage = self.storage.take();
         let len = storage.len();
@@ -94,16 +91,16 @@ impl<'a> OperatingHooks for OsHooks<'a> {
 
     fn component_capacity(
         &self,
-        component: &dress_up::component::Component,
+        _component: &dress_up::component::Component,
     ) -> Result<usize, dress_up::error::Error> {
         Ok(self.capacity)
     }
 
     fn fetch(
         &self,
-        component: &dress_up::component::Component,
-        slot: Option<u64>,
-        uri: &str,
+        _component: &dress_up::component::Component,
+        _slot: Option<u64>,
+        _uri: &str,
     ) -> Result<(), Error> {
         let mut storage = self.storage.take();
         storage.clear();
