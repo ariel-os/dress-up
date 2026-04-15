@@ -236,10 +236,14 @@ impl<'a> Manifest<'a, Authenticated> {
     }
 
     /// Execute all command sequences in the manifest.
-    pub fn execute_full(&self) -> Result<(), Error> {
-        let _state = ManifestState::default();
-        // Separate out per component, common first, then the step
-        todo!();
+    pub fn execute_full(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+        for section in crate::consts::SUIT_COMMAND_SECTIONS {
+            let res = self.execute_section_with_common(os_hooks, section);
+            // Ignore NoCommandSequence errors
+            if res.is_err_and(|e| !matches!(e, Error::NoCommandSection { .. })) {
+                return res;
+            }
+        }
         Ok(())
     }
 }
