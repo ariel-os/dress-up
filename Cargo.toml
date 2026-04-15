@@ -18,15 +18,15 @@ sha2 = { version = "0.10.9", default-features = false }
 sha3 = { version = "0.10.8", default-features = false, optional = true }
 uuid = { version = "1.18.1", default-features = false }
 
+[dev-dependencies]
+cbor-edn = { version = "0.0.9", default-features = false }
+cose-rust = "0.1.8"
+hex = "0.4.3"
+openssl = "0.10.75"
+
 [features]
 default = ["sha384", "sha512", "shake128", "shake256"]
 sha384 = []
 sha512 = []
 shake128 = ["dep:sha3"]
 shake256 = ["dep:sha3"]
-
-[dev-dependencies]
-cose-rust = "0.1.8"
-openssl = "0.10.75"
-hex = "0.4.3"
-cbor-edn = { version = "0.0.9", default-features = false }
