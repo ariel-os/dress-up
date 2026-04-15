@@ -2,7 +2,9 @@
 use minicbor::{bytes::ByteSlice, data::Type, encode::Write, CborLen, Decode, Encode, Encoder};
 
 use crate::error::Error;
-use digest::{ExtendableOutput, FixedOutput, OutputSizeUser, Update};
+#[allow(unused_imports)]
+use digest::ExtendableOutput;
+use digest::{FixedOutput, OutputSizeUser, Update};
 
 /// SUIT digest algorithm numbers.
 ///
@@ -37,9 +39,13 @@ pub(crate) struct SuitDigest<'a> {
 #[derive(Clone, Debug)]
 pub(crate) enum Hasher {
     Sha2(sha2::Sha256),
+    #[cfg(feature = "sha384")]
     Sha384(sha2::Sha384),
+    #[cfg(feature = "sha512")]
     Sha512(sha2::Sha512),
+    #[cfg(feature = "shake128")]
     Shake128(sha3::Shake128),
+    #[cfg(feature = "shake256")]
     Shake256(sha3::Shake256),
 }
 
@@ -58,19 +64,23 @@ impl<'a> SuitDigest<'a> {
                 let output = digest.finalize_fixed();
                 Ok(**self.digest == *output)
             }
+            #[cfg(feature = "sha384")]
             (SuitDigestAlgorithm::Sha384, Hasher::Sha384(digest)) => {
                 let output = digest.finalize_fixed();
                 Ok(**self.digest == *output)
             }
+            #[cfg(feature = "sha512")]
             (SuitDigestAlgorithm::Sha512, Hasher::Sha512(digest)) => {
                 let output = digest.finalize_fixed();
                 Ok(**self.digest == *output)
             }
+            #[cfg(feature = "shake128")]
             (SuitDigestAlgorithm::Shake128, Hasher::Shake128(digest)) => {
                 let mut output = [0u8; 32];
                 digest.finalize_xof_into(&mut output);
                 Ok(**self.digest == output)
             }
+            #[cfg(feature = "shake256")]
             (SuitDigestAlgorithm::Shake256, Hasher::Shake256(digest)) => {
                 let mut output = [0u8; 64];
                 digest.finalize_xof_into(&mut output);
@@ -124,19 +134,32 @@ impl Hasher {
     fn new(algo: SuitDigestAlgorithm) -> Result<Self, Error> {
         Ok(match algo {
             SuitDigestAlgorithm::Sha256 => Self::Sha2(sha2::Sha256::default()),
-            SuitDigestAlgorithm::Shake128 => Self::Shake128(sha3::Shake128::default()),
+            #[cfg(feature = "sha384")]
             SuitDigestAlgorithm::Sha384 => Self::Sha384(sha2::Sha384::default()),
+            #[cfg(feature = "sha512")]
             SuitDigestAlgorithm::Sha512 => Self::Sha512(sha2::Sha512::default()),
+            #[cfg(feature = "shake128")]
+            SuitDigestAlgorithm::Shake128 => Self::Shake128(sha3::Shake128::default()),
+            #[cfg(feature = "shake256")]
             SuitDigestAlgorithm::Shake256 => Self::Shake256(sha3::Shake256::default()),
+            algo => {
+                return Err(Error::UnsupportedDigestAlgo {
+                    algorithm: algo.into(),
+                })
+            }
         })
     }
 
     fn output_size(&self) -> usize {
         match self {
             Hasher::Sha2(_) => sha2::Sha256::output_size(),
+            #[cfg(feature = "sha384")]
             Hasher::Sha384(_) => sha2::Sha384::output_size(),
+            #[cfg(feature = "sha512")]
             Hasher::Sha512(_) => sha2::Sha512::output_size(),
+            #[cfg(feature = "shake128")]
             Hasher::Shake128(_) => 32, // RFC 9054 defined
+            #[cfg(feature = "shake256")]
             Hasher::Shake256(_) => 64, // RFC 9054 defined
         }
     }
@@ -144,9 +167,13 @@ impl Hasher {
     fn finalize_into(self, out: &mut [u8]) {
         match self {
             Hasher::Sha2(core_wrapper) => core_wrapper.finalize_into(out.into()),
+            #[cfg(feature = "sha384")]
             Hasher::Sha384(core_wrapper) => core_wrapper.finalize_into(out.into()),
+            #[cfg(feature = "sha512")]
             Hasher::Sha512(core_wrapper) => core_wrapper.finalize_into(out.into()),
+            #[cfg(feature = "shake128")]
             Hasher::Shake128(core_wrapper) => core_wrapper.finalize_xof_into(out),
+            #[cfg(feature = "shake256")]
             Hasher::Shake256(core_wrapper) => core_wrapper.finalize_xof_into(out),
         }
     }
@@ -156,9 +183,13 @@ impl Update for Hasher {
     fn update(&mut self, data: &[u8]) {
         match self {
             Hasher::Sha2(core_wrapper) => core_wrapper.update(data),
+            #[cfg(feature = "sha384")]
             Hasher::Sha384(core_wrapper) => core_wrapper.update(data),
+            #[cfg(feature = "sha512")]
             Hasher::Sha512(core_wrapper) => core_wrapper.update(data),
+            #[cfg(feature = "shake128")]
             Hasher::Shake128(core_wrapper) => core_wrapper.update(data),
+            #[cfg(feature = "shake256")]
             Hasher::Shake256(core_wrapper) => core_wrapper.update(data),
         }
     }
