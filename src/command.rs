@@ -288,17 +288,6 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         })
     }
 
-    fn enter_sequence(decoder: &mut Decoder) -> Result<u64, Error> {
-        let position = decoder.position();
-        let length = decoder.array()?;
-        let length = match length {
-            Some(n) if n % 2 == 1 => return Err(Error::InvalidCommandSequence { position }),
-            None => return Err(Error::InvalidCommandSequence { position }),
-            Some(n) => n / 2,
-        };
-        Ok(length)
-    }
-
     fn process_command(
         &self,
         state: &mut ManifestState<'a>,
