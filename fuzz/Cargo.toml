@@ -1,0 +1,42 @@
+[package]
+name = "dress-up-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[profile.dev]
+debug = 2
+opt-level = 0
+
+[profile.release]
+debug = 2
+opt-level = 1
+lto = false
+codegen-units = 1
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+dress-up = { path = ".." }
+uuid = { version = "1.18.1", default-features = false }
+digest = { version = "0.10.7", default-features = false }
+generic-array = { version = "1.3.5", features = ["const-default"] }
+cbor-edn = { version = "0.0.10", default-features = false }
+
+
+[[bin]]
+name = "minimal_fuzz_test"
+path = "fuzz_targets/minimal_fuzz_test.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "suit_fuzz"
+path = "fuzz_targets/suit_fuzz.rs"
+test = false
+doc = false
+bench = false
+
