@@ -417,4 +417,13 @@ bz/m4rVlnIXbwK07HypLbAmBMcCjbazR14vTgdzfsJwFLbM5kdtzOLSolg==
             })
             .unwrap();
     }
+
+    #[test]
+    fn test_hang_on_eof() {
+        let input = &[0xd8, 0x6b, 0xbf];
+        let manifest = SuitManifest::from_bytes(&input);
+        let envelope = manifest.envelope().unwrap();
+        let auth_err = envelope.auth_object().unwrap_err();
+        assert_eq!(auth_err, Error::EndOfInput);
+    }
 }
