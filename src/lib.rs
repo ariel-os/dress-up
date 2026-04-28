@@ -298,12 +298,14 @@ impl<'a> SuitManifest<'a, Authenticated> {}
 impl<'a, S: AuthState> Envelope<'a, S> {
     fn get_object(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
         let mut decoder = self.decoder.clone();
-        Ok(decoder
+        decoder
             .map_iter::<i16, &ByteSlice>()?
             .find_map(|item| match item {
-                Ok((key, item)) if key == search_key.into() => Some(item),
+                Ok((key, item)) if key == search_key.into() => Some(Ok(item)),
+                Err(e) => Some(Err(e.into())),
                 _ => None,
-            }))
+            })
+            .transpose()
     }
 
     fn get_object_wrapped(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
