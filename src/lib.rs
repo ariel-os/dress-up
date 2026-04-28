@@ -296,14 +296,6 @@ impl<'a> SuitManifest<'a, New> {
 impl<'a> SuitManifest<'a, Authenticated> {}
 
 impl<'a, S: AuthState> Envelope<'a, S> {
-    fn from_manifest(manifest: &SuitManifest<'a, S>) -> Self {
-        let decoder = manifest.decoder.clone();
-        Self {
-            decoder,
-            phantom: PhantomData,
-        }
-    }
-
     fn get_object(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
         let mut decoder = self.decoder.clone();
         Ok(decoder
