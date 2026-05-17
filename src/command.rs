@@ -98,7 +98,6 @@ impl<'a> Command<'a> {
 pub(crate) struct CommandSequenceIterator<'a> {
     d: Decoder<'a>,
     remaining: u64,
-    offset: usize,
 }
 
 impl<'a> CommandSequenceIterator<'a> {
@@ -108,7 +107,6 @@ impl<'a> CommandSequenceIterator<'a> {
         Ok(CommandSequenceIterator {
             d,
             remaining: length,
-            offset,
         })
     }
 
@@ -193,10 +191,6 @@ impl<'a> CommandSequence<'a> {
             .async_process(state, component_info)
             .await
             .map_err(|e| e.add_offset(self.offset))
-    }
-
-    fn cbor(&self) -> &'a ByteSlice {
-        self.sequence
     }
 
     pub(crate) fn iter(&self) -> Result<CommandSequenceIterator<'_>, Error> {
