@@ -26,16 +26,19 @@ bitflags! {
 }
 
 impl CommandSequenceProperties {
+    #[allow(unused)]
     pub(crate) fn valid_shared_sequence(self) -> bool {
         self == Self::HasVendorCheck | Self::HasClassCheck
     }
 
+    #[allow(unused)]
     pub(crate) fn has_custom_commands(self) -> bool {
         self.contains(Self::HasCustom)
     }
 }
 
 #[derive(Clone, Debug)]
+#[allow(unused)]
 pub(crate) enum CommandArgument<'a> {
     Report(ReportingPolicy),
     Cbor { decoder: Decoder<'a>, offset: usize },
@@ -85,6 +88,7 @@ impl<'a> Command<'a> {
         }
     }
 
+    #[allow(unused)]
     fn get_report_policy(&self) -> Result<ReportingPolicy, Error> {
         if let CommandArgument::Report(policy) = self.argument {
             return Ok(policy);
@@ -248,6 +252,7 @@ impl<'a, O> CommandSequenceExecutor<'a, O> {
         }
     }
 
+    #[allow(unused)]
     fn decode_reporting_policy(decoder: &mut Decoder) -> Result<ReportingPolicy, Error> {
         Ok(decoder.decode::<ReportingPolicy>()?)
     }

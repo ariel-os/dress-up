@@ -151,6 +151,7 @@ impl Hasher {
         })
     }
 
+    #[allow(unused)]
     fn output_size(&self) -> usize {
         match self {
             Hasher::Sha2(_) => sha2::Sha256::output_size(),
@@ -165,6 +166,7 @@ impl Hasher {
         }
     }
 
+    #[allow(unused)]
     fn finalize_into(self, out: &mut [u8]) {
         match self {
             Hasher::Sha2(core_wrapper) => core_wrapper.finalize_into(out.into()),

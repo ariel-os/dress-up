@@ -6,6 +6,7 @@ pub(crate) struct ReportingPolicy {
     policy: u8,
 }
 
+#[allow(unused)]
 impl ReportingPolicy {
     pub(crate) fn new(policy: u8) -> ReportingPolicy {
         ReportingPolicy { policy }

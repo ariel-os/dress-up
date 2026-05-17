@@ -104,6 +104,7 @@ impl<'a> Manifest<'a, Authenticated> {
 
     // Checks if the first command in a command sequence is a SetComponentIndex, if there is more
     // than one component in the manifest
+    #[allow(unused)]
     fn check_sequences(&self) -> Result<bool, Error> {
         if self.get_common()?.component_count()? > 1 {
             for section in crate::consts::SUIT_COMMAND_SECTIONS {
@@ -404,6 +405,7 @@ impl<'a> CommonSection<'a> {
         }
     }
 
+    #[allow(unused)]
     fn verify_components(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
         let mut decoder = Decoder::new(self.components);
         for component in
@@ -414,6 +416,7 @@ impl<'a> CommonSection<'a> {
         Ok(())
     }
 
+    #[allow(unused)]
     fn verify_shared_sequence(&self) -> Result<bool, Error> {
         self.shared_sequence()
             .properties()
