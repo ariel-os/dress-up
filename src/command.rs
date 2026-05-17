@@ -13,7 +13,7 @@ use crate::consts::SuitCommand;
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
 use crate::report::ReportingPolicy;
-use crate::OperatingHooks;
+use crate::{AsyncOperatingHooks, OperatingHooks};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -182,6 +182,19 @@ impl<'a> CommandSequence<'a> {
             .map_err(|e| e.add_offset(self.offset))
     }
 
+    pub(crate) async fn async_execute(
+        &self,
+        state: ManifestState<'a>,
+        component_info: &'a ComponentInfo<'a>,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> Result<ManifestState<'a>, Error> {
+        let executor = CommandSequenceExecutor::new(self.sequence, self.offset, os_hooks);
+        executor
+            .async_process(state, component_info)
+            .await
+            .map_err(|e| e.add_offset(self.offset))
+    }
+
     fn cbor(&self) -> &'a ByteSlice {
         self.sequence
     }
@@ -226,13 +239,13 @@ impl<'a> CommandSequence<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CommandSequenceExecutor<'a, O: OperatingHooks> {
+pub(crate) struct CommandSequenceExecutor<'a, O> {
     command_sequence: &'a ByteSlice,
     offset: usize,
     os_hooks: &'a O,
 }
 
-impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
+impl<'a, O> CommandSequenceExecutor<'a, O> {
     fn new(command_sequence: &'a ByteSlice, offset: usize, os_hooks: &'a O) -> Self {
         Self {
             command_sequence,
@@ -241,6 +254,302 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         }
     }
 
+    fn decode_reporting_policy(decoder: &mut Decoder) -> Result<ReportingPolicy, Error> {
+        Ok(decoder.decode::<ReportingPolicy>()?)
+    }
+}
+
+impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
+    async fn async_process_command(
+        &self,
+        state: &mut ManifestState<'a>,
+        component_info: &'a ComponentInfo<'a>,
+        match_component: &mut bool,
+        mut command: Command<'a>,
+    ) -> Result<(), Error> {
+        let component = component_info.component();
+        let argument_offset = command.get_argument_offset();
+        match command.command {
+            SuitCommand::Unset => {
+                return Err(Error::UnsupportedCommand {
+                    command: command.command.into(),
+                })
+            }
+            SuitCommand::Abort => {
+                return Err(Error::ConditionMatchFail {
+                    position: command.position,
+                })
+            }
+            SuitCommand::OverrideParameters => {
+                let mut argument = command.get_argument_cbor()?.clone();
+                state
+                    .update_parameter(&mut argument)
+                    .map_err(|e| e.add_offset(argument_offset))?;
+            }
+            SuitCommand::SetComponentIndex => {
+                *match_component = component_info.in_applylist(command.get_argument_cbor()?)?;
+            }
+            SuitCommand::CheckContent => {
+                // byte by byte check
+                self.async_cond_check_content(state, component).await?;
+            }
+            SuitCommand::ClassIdentifier => {
+                self.async_cond_class_identifier(state, component).await?
+            }
+            SuitCommand::ComponentSlot => {
+                self.async_cond_component_slot(state, component).await?;
+            }
+            SuitCommand::Copy => Err(Error::UnsupportedCommand {
+                command: SuitCommand::Copy.into(),
+            })?,
+            SuitCommand::DeviceIdentifier => {
+                self.async_cond_device_identifier(state, component).await?;
+            }
+            SuitCommand::Fetch => {
+                self.async_directive_fetch(state, component).await?;
+            }
+            SuitCommand::ImageMatch => {
+                // Digest check
+                self.async_cond_image_match(state, component).await?;
+            }
+            SuitCommand::Invoke => Err(Error::UnsupportedCommand {
+                command: SuitCommand::Invoke.into(),
+            })?,
+            SuitCommand::RunSequence => Err(Error::UnsupportedCommand {
+                command: SuitCommand::RunSequence.into(),
+            })?,
+            SuitCommand::Swap => Err(Error::UnsupportedCommand {
+                command: SuitCommand::RunSequence.into(),
+            })?,
+            SuitCommand::TryEach => {
+                return Err(Error::UnsupportedCommand {
+                    command: command.command.into(),
+                })
+            }
+            SuitCommand::VendorIdentifier => {
+                self.async_cond_vendor_identifier(state, component).await?;
+            }
+            SuitCommand::WriteContent => {
+                self.async_directive_write(state, component).await?;
+            }
+            SuitCommand::Custom(_n) => todo!(),
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn async_process(
+        &self,
+        mut state: ManifestState<'a>,
+        component_info: &'a ComponentInfo<'a>,
+    ) -> Result<ManifestState<'a>, Error> {
+        let mut match_component = true;
+        for command in CommandSequenceIterator::new(self.command_sequence, self.offset)? {
+            let mut command = command?;
+            let position = command.position;
+            if !match_component {
+                if matches!(command.command, SuitCommand::SetComponentIndex) {
+                    if let CommandArgument::Cbor {
+                        ref mut decoder,
+                        offset,
+                    } = command.argument
+                    {
+                        match_component = component_info
+                            .in_applylist(decoder)
+                            .map_err(|e| e.add_offset(offset))?;
+                    }
+                }
+            } else {
+                self.async_process_command(
+                    &mut state,
+                    component_info,
+                    &mut match_component,
+                    command,
+                )
+                .await
+                .map_err(|e| e.add_offset(position))?;
+            }
+        }
+        Ok(state)
+    }
+
+    async fn async_cond_class_identifier(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(class_id) = state.class_id {
+            self.os_hooks
+                .match_class_id(class_id, component)
+                .await
+                .and_then(|b| {
+                    if b {
+                        Ok(())
+                    } else {
+                        Err(Error::ConditionMatchFail { position: 0 })
+                    }
+                })
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_cond_vendor_identifier(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(vendor_id) = state.vendor_id {
+            self.os_hooks
+                .match_vendor_id(vendor_id, component)
+                .await
+                .and_then(|b| {
+                    if b {
+                        Ok(())
+                    } else {
+                        Err(Error::ConditionMatchFail { position: 0 })
+                    }
+                })
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_cond_device_identifier(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(device_id) = state.device_id {
+            self.os_hooks
+                .match_device_id(device_id, component)
+                .await
+                .and_then(|b| {
+                    if b {
+                        Ok(())
+                    } else {
+                        Err(Error::ConditionMatchFail { position: 0 })
+                    }
+                })
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_cond_component_slot(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(component_slot) = state.component_slot {
+            self.os_hooks
+                .match_component_slot(component, component_slot)
+                .await
+                .and_then(|b| {
+                    if b {
+                        Ok(())
+                    } else {
+                        Err(Error::ConditionMatchFail { position: 0 })
+                    }
+                })
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_cond_check_content(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(content) = &state.content {
+            let size = self.os_hooks.component_size(component).await?;
+            if size != content.len() {
+                return Err(Error::ConditionMatchFail { position: 0 });
+            }
+            let mut choice = Choice::TRUE;
+            let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
+            for offset in (0..size).step_by(buf.len()) {
+                let diff = size.saturating_sub(offset);
+                let read_size = if diff < buf.len() { diff } else { buf.len() };
+                let buf = &mut buf[0..read_size];
+                self.os_hooks
+                    .component_read(component, state.component_slot, offset, buf)
+                    .await?;
+                let manifest_content = content
+                    .get(offset..(offset + read_size))
+                    .ok_or(Error::ConditionMatchFail { position: 0 })?;
+                choice = choice.and(manifest_content.ct_eq(buf));
+            }
+            if choice.to_bool() {
+                Ok(())
+            } else {
+                Err(Error::ConditionMatchFail { position: 0 })
+            }
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_cond_image_match(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(digest) = &state.image_digest {
+            let size = self.os_hooks.component_size(component).await?;
+            let mut hasher = digest.hasher()?;
+            let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
+            for offset in (0..size).step_by(buf.len()) {
+                let diff = size.saturating_sub(offset);
+                let read_size = if diff < buf.len() { diff } else { buf.len() };
+                let buf = &mut buf[0..read_size];
+                self.os_hooks
+                    .component_read(component, state.component_slot, offset, buf)
+                    .await?;
+                hasher.update(buf)
+            }
+            digest.match_hasher(hasher).and_then(|b| {
+                if b {
+                    Ok(())
+                } else {
+                    Err(Error::ConditionMatchFail { position: 0 })
+                }
+            })
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_directive_fetch(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(uri) = state.uri {
+            self.os_hooks
+                .fetch(component, state.component_slot, uri)
+                .await
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+
+    async fn async_directive_write(
+        &self,
+        state: &ManifestState<'_>,
+        component: &Component<'_>,
+    ) -> Result<(), Error> {
+        if let Some(content) = state.content {
+            self.os_hooks
+                .component_write(component, state.component_slot, 0, content)
+                .await
+        } else {
+            Err(Error::ParameterNotSet { position: 0 })
+        }
+    }
+}
+
+impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
     fn try_each(
         &self,
         state: &mut ManifestState<'a>,
@@ -538,10 +847,6 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         } else {
             Err(Error::ParameterNotSet { position: 0 })
         }
-    }
-
-    fn decode_reporting_policy(decoder: &mut Decoder) -> Result<ReportingPolicy, Error> {
-        Ok(decoder.decode::<ReportingPolicy>()?)
     }
 }
 

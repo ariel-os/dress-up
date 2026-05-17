@@ -29,8 +29,9 @@ hex = "0.4.3"
 openssl = "0.10.77"
 
 [features]
-default = ["sha384", "sha512", "shake128", "shake256"]
+default = ["sha384", "sha512", "shake128", "shake256", "async"]
 sha384 = []
 sha512 = []
 shake128 = ["dep:sha3"]
 shake256 = ["dep:sha3"]
+async = []

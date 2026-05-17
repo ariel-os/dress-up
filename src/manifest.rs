@@ -10,7 +10,7 @@ use crate::command::CommandSequence;
 use crate::component::{ComponentInfo, ComponentIter};
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
-use crate::{AuthState, Authenticated, OperatingHooks};
+use crate::{AsyncOperatingHooks, AuthState, Authenticated, OperatingHooks};
 
 /// Inner SUIT manifest.
 #[derive(Debug, Clone)]
@@ -195,6 +195,42 @@ impl<'a> Manifest<'a, Authenticated> {
         Ok(())
     }
 
+    async fn async_execute_section_with_common(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+        section: crate::consts::Manifest,
+    ) -> Result<(), Error> {
+        let start_state = ManifestState::default();
+        let command_section =
+            self.find_command_sequence(section)?
+                .ok_or(Error::NoCommandSection {
+                    section: section.into(),
+                })?;
+
+        let common = self.get_common()?;
+        let mut component_decoder = Decoder::new(common.components);
+        for (idx, component) in ComponentIter::new(&mut component_decoder)
+            .map_err(|e| e.add_offset(common.component_offset))?
+            .enumerate()
+        {
+            if let Ok(component) = component {
+                let idx = idx.try_into().map_err(|_| Error::UnexpectedCbor {
+                    position: self.decoder.position(),
+                })?;
+                let component_info = ComponentInfo::new(component, idx);
+
+                let state = common
+                    .shared_sequence()
+                    .async_execute(start_state.clone(), &component_info, os_hooks)
+                    .await?;
+                command_section
+                    .async_execute(state, &component_info, os_hooks)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
     /// Execute the command sequence in the payload fetch section.
     ///
     /// The command sequence in the common section is executed before the command sequence in the
@@ -248,6 +284,69 @@ impl<'a> Manifest<'a, Authenticated> {
             }
         }
         Ok(())
+    }
+
+    /// Execute the command sequence in the payload fetch section.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// payload fetch is executed.
+    pub async fn async_execute_payload_fetch(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadFetch)
+            .await
+    }
+
+    /// Execute the command sequence in the payload installation section.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// payload installation is executed.
+    pub async fn async_execute_payload_installation(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        self.async_execute_section_with_common(
+            os_hooks,
+            crate::consts::Manifest::PayloadInstallation,
+        )
+        .await
+    }
+
+    /// Execute the command sequence in the image validation section.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// image validation is executed.
+    pub async fn async_execute_image_validation(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageValidation)
+            .await
+    }
+
+    /// Execute the command sequence in the image loading section.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// image loading is executed.
+    pub async fn async_execute_image_loading(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageLoading)
+            .await
+    }
+
+    /// Execute the command sequence in the image loading section.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// invoke is executed.
+    pub async fn async_execute_invoke(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageInvocation)
+            .await
     }
 }
 

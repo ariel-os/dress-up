@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(dead_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![deny(missing_docs)]
 
@@ -187,11 +186,8 @@
 //! [suit-rfc]: https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34
 use core::marker::PhantomData;
 
-use generic_array::ArrayLength;
 use minicbor::bytes::ByteSlice;
 use minicbor::decode::Decoder;
-
-use uuid::Uuid;
 
 pub mod auth;
 mod cbor;
@@ -211,7 +207,7 @@ use crate::consts::*;
 use crate::error::Error;
 use crate::manifest::Manifest;
 
-pub use crate::operatinghooks::OperatingHooks;
+pub use crate::operatinghooks::{AsyncOperatingHooks, OperatingHooks};
 
 /// Authentication state of the manifest
 pub trait AuthState {}
