@@ -2,7 +2,6 @@
 use core::marker::PhantomData;
 
 use minicbor::bytes::ByteSlice;
-use minicbor::data::Token;
 use minicbor::decode::Decoder;
 
 use crate::cbor::SubCbor;
@@ -17,16 +16,6 @@ use crate::{AsyncOperatingHooks, AuthState, Authenticated, OperatingHooks};
 pub struct Manifest<'a, S: AuthState> {
     decoder: Decoder<'a>,
     phantom: PhantomData<S>,
-}
-
-fn try_into_u64(token: Token) -> Result<u64, Error> {
-    match token {
-        Token::U8(n) => Ok(n.into()),
-        Token::U16(n) => Ok(n.into()),
-        Token::U32(n) => Ok(n.into()),
-        Token::U64(n) => Ok(n),
-        _ => Err(Error::UnexpectedCbor { position: 0 }),
-    }
 }
 
 impl<'a, S: AuthState> Manifest<'a, S> {
