@@ -6,3 +6,5 @@ coverage
 cov_html
 debug_test
 *.html
+fuzz_cov.sh
+cov_reports
