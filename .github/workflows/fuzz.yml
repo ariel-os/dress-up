@@ -1,0 +1,35 @@
+name: Fuzz
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fuzz (unauth)"
+            target: "suit_fuzz_unauth"
+          - name: "Fuzz (auth, no structure-awareness)"
+            target: "suit_fuzz_auth"
+          - name: "Fuzz (auth, structure-awareness)"
+            target: "suit_fuzz_auth_stra1"
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        run: rustup update nightly && rustup default nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run fuzz target
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=3600
