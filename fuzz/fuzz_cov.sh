@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # fuzz_cov.sh – Run cargo‑fuzz coverage and generate HTML & text reports
 # Usage: ./fuzz_cov.sh <target> 
-# (execute from project root)
+#
+# Execute from project root
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -13,7 +14,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 TARGET="$1"
-REPORT_DIR="fuzz/cov_reports/$(date +%Y-%m-%d_%H%M%S)"
+REPORT_DIR="fuzz/results/cov_reports/$(date +%Y-%m-%d_%H%M%S)"
 
 # use direct binary path since 'cargo cov' doesn't seem to work on the VM
 # --> https://github.com/rust-fuzz/cargo-fuzz/issues/308

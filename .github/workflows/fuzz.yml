@@ -39,30 +39,22 @@ jobs:
         run: |
           echo "stamp=$(date -u +'%Y%m%d_%H%M%S')" >> "$GITHUB_OUTPUT"
 
+      - name: Build fuzz target
+        run: cargo fuzz build ${{ matrix.target }} 
+
       - name: Run fuzz target
-        run: cargo fuzz run ${{ matrix.target }} -- -timeout=30 -max_total_time=3600
+        run: ./fuzz/run_fuzz.sh ${{ matrix.target }} -- -timeout=10 -max_total_time=3600
 
       - name: Create code coverage reports
         if: ${{ always() }}
         run: ./fuzz/fuzz_cov.sh ${{ matrix.target }}
 
-      - name: Archive fuzzing corpus
+      - name: Archive corpus, artifacts and results directory (metrics and cov reports)
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with: 
-          name: ${{ steps.ts.outputs.stamp }}_${{ matrix.target }}-corpus
-          path: fuzz/corpus/*
-
-      - name: Archive fuzzing artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with: 
-          name: ${{ steps.ts.outputs.stamp }}_${{ matrix.target }}-artifacts
-          path: fuzz/artifacts/*
-
-      - name: Archive code coverage reports
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with: 
-          name: ${{ steps.ts.outputs.stamp }}_${{ matrix.target }}-code-coverage-reports
-          path: fuzz/cov_reports/*
+          name: ${{ steps.ts.outputs.stamp }}_${{ matrix.target }}-export
+          path: |
+            fuzz/corpus/**
+            fuzz/artifacts/**
+            fuzz/results/**

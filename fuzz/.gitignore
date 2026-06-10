@@ -3,7 +3,6 @@ corpus
 artifacts
 coverage
 .vscode
-cov_html
 debug_test
 *.html
-cov_reports
+results
