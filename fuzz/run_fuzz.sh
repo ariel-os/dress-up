@@ -3,7 +3,7 @@
 # Usage: ./run_time_fuzz.sh <fuzz_target_name> -- [cargo-fuzz / LibFuzzer arguments]
 # Example: ./run_time_fuzz.sh suit_fuzz_unauth -- -timeout=30 -max_total_time=3600
 #
-# IMPORTANT: build the target binary BEFORE calling this script, otherwise it will fail
+# IMPORTANT: build the target BEFORE calling this script, otherwise the build process will be counted into the runtime 
 #   --> cargo fuzz build <fuzz_target_name>
 #
 # Execute from project root
@@ -32,17 +32,9 @@ echo "${LIBFUZZER_ARGS}"
 
 mkdir -p "${METRICS_DIR}"
 
-# Run only the already‑built fuzzer binary to avoid rebuild time.
-BIN="fuzz/target/x86_64-unknown-linux-gnu/release/${TARGET}"
-if [[ ! -x "$BIN" ]]; then
-  echo "Could not find built fuzz binary for target '${TARGET}'."
-  echo "  Did you build the binary?"
-  exit 2
-fi
-
 START_NS=$(date +%s%N)
 set +e
-"$BIN" "${LIBFUZZER_ARGS[@]}"
+cargo fuzz run "${TARGET}" -- "${LIBFUZZER_ARGS[@]}"
 RC=$?
 set -e
 END_NS=$(date +%s%N)
