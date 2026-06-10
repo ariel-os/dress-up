@@ -13,7 +13,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 TARGET="$1"
-REPORT_DIR="cov_reports/$(date +%Y-%m-%d_%H%M%S)"
+REPORT_DIR="fuzz/cov_reports/$(date +%Y-%m-%d_%H%M%S)"
 
 # use direct binary path since 'cargo cov' doesn't seem to work on the VM
 # --> https://github.com/rust-fuzz/cargo-fuzz/issues/308
@@ -33,6 +33,8 @@ COV_PROFILE="${COV_DIR}/coverage.profdata"
 BIN_PATH="target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/release/${TARGET}"
 
 echo "Creating HTML coverage report → ${HTML_OUT} ..."
+# ignoring code in .cargo and .rustup to leave out dependency code
+# and focus on the actual project code
 "${LLVM_COV_BIN}" \
     show "${BIN_PATH}" \
     --format=html \
@@ -44,10 +46,15 @@ echo "Creating HTML coverage report → ${HTML_OUT} ..."
 TXT_OUT="${REPORT_DIR}/cov_${TARGET}.txt"
 
 echo "Creating textual coverage report → ${TXT_OUT} ..."
+# ignoring code in .cargo and .rustup to leave out dependency code
+# and focus on the actual project code
+#
+# ALSO: ignoring code of fuzzer itself to only have coverage percentages
+# of the actual project code
 "${LLVM_COV_BIN}" \
     report "${BIN_PATH}" \
     -instr-profile="${COV_PROFILE}" \
-    -ignore-filename-regex='/.cargo/|/.rustup/|/fuzz_targets/' \
+    -ignore-filename-regex='/.cargo/|/.rustup/|/fuzz/' \
     > "${TXT_OUT}"
 
 echo "All done."
