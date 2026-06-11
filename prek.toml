@@ -24,5 +24,12 @@ hooks = [
     "--config",
     "format_generated_files=false",
   ], files = "\\.rs$" },
+  { id = "cargo clippy", name = "cargo clippy", language = "system", pass_filenames = false, entry = "cargo clippy", args = [
+    "--all-targets",
+    "--all-features",
+    "--workspace",
+    "--",
+    "-Dwarnings",
+  ], files = "\\.rs$" },
   { id = "cargo test", name = "cargo test", language = "system", pass_filenames = false, entry = "cargo test", files = "\\.rs$" },
 ]
