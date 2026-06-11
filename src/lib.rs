@@ -29,7 +29,7 @@
 //! - Severable elements
 //! - Reporting policy
 //!
-//! Dress‑Up will never support the following features. These are out of scope:
+//! Dress‑Up considers the following features out of scope and there are no plans to support these:
 //!
 //! - Parallel processing
 //! - Manifest creation
