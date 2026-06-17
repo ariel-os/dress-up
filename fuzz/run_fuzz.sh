@@ -17,10 +17,24 @@ if [[ $# -lt 1 ]]; then
   exit 2
 fi
 
+# Targets that need prepopulated corpora
+PREPOP_TARGETS=(
+  raw_auth
+  raw_unauth
+)
+
 TARGET="$1"
 METRICS_DIR="fuzz/results/metrics/$(date +%Y-%m-%d_%H%M%S)"
 OUTFILE="${METRICS_DIR}/${TARGET}_time_to_exit.json"
 shift || true
+
+# Prepopulate corpus if needed for target
+for pre in "${PREPOP_TARGETS[@]}"; do
+  if [[ "${TARGET}" == "${pre}" ]]; then
+    mkdir -p "fuzz/corpus/${TARGET}"
+    cp -r fuzz/corpus_prepop/* fuzz/corpus/${TARGET}
+  fi
+done
 
 LIBFUZZER_ARGS=()
 echo "${1:-}"
@@ -32,6 +46,7 @@ echo "${LIBFUZZER_ARGS}"
 
 mkdir -p "${METRICS_DIR}"
 
+# Measure runtime for time-to-crash comparison
 START_NS=$(date +%s%N)
 set +e
 cargo fuzz run "${TARGET}" -- "${LIBFUZZER_ARGS[@]}"
@@ -42,6 +57,7 @@ END_NS=$(date +%s%N)
 ELAPSED_NS=$((END_NS - START_NS))
 ELAPSED_MS=$((ELAPSED_NS / 1000000))
 
+# Write metrics to JSON
 cat > "$OUTFILE" <<EOF
 {
   "target": "${TARGET}",
