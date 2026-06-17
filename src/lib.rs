@@ -273,7 +273,7 @@ impl<'a> SuitManifest<'a, New> {
         let envelope = self.envelope()?;
         // Consists of a bstr wrapped digest + *bstr wrapped auth blocks
         let manifest = envelope.get_object_wrapped(SuitEnvelope::Manifest)?;
-        let auth_object = envelope.get_object(SuitEnvelope::Authentication)?;
+        let auth_object = envelope.get_object(SuitEnvelope::Authentication.into())?;
 
         match (auth_object, manifest) {
             (None, _) => Err(Error::NoAuthObject),
@@ -292,13 +292,45 @@ impl<'a> SuitManifest<'a, New> {
 
 impl<'a> SuitManifest<'a, Authenticated> {}
 
+#[derive(PartialEq)]
+enum SearchKey<'a> {
+    Integer(SuitEnvelope),
+    Uri(&'a str),
+}
+
+impl<'a> From<SuitEnvelope> for SearchKey<'a> {
+    fn from(env: SuitEnvelope) -> Self {
+        SearchKey::Integer(env)
+    }
+}
+
+impl<'a, C> minicbor::Decode<'a, C> for SearchKey<'a> {
+    fn decode(d: &mut Decoder<'a>, _ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        match d.datatype()? {
+            minicbor::data::Type::U8
+            | minicbor::data::Type::U16
+            | minicbor::data::Type::I8
+            | minicbor::data::Type::I16 => {
+                let val = d.i16()?;
+                let envelope = SuitEnvelope::try_from(val).map_err(|_| {
+                    minicbor::decode::Error::message("Unknown SuitEnvelope integer tag")
+                })?;
+
+                Ok(SearchKey::Integer(envelope))
+            }
+            minicbor::data::Type::String => Ok(SearchKey::Uri(d.str()?)),
+            ty => Err(minicbor::decode::Error::type_mismatch(ty)),
+        }
+    }
+}
+
 impl<'a, S: AuthState> Envelope<'a, S> {
-    fn get_object(&self, search_key: SuitEnvelope) -> Result<Option<&'a ByteSlice>, Error> {
+    fn get_object(&self, search_key: SearchKey) -> Result<Option<&'a ByteSlice>, Error> {
         let mut decoder = self.decoder.clone();
         decoder
-            .map_iter::<i16, &ByteSlice>()?
+            .map_iter::<SearchKey, &ByteSlice>()?
             .find_map(|item| match item {
-                Ok((key, item)) if key == search_key.into() => Some(Ok(item)),
+                Ok((key, item)) if key == search_key => Some(Ok(item)),
                 Err(e) => Some(Err(e.into())),
                 _ => None,
             })
@@ -325,7 +357,7 @@ impl<'a, S: AuthState> Envelope<'a, S> {
     ///
     /// Returns a reference to a byte slice containing the CBOR-encoded authentication object.
     pub fn auth_object(&self) -> Result<&'a ByteSlice, Error> {
-        let auth_object = self.get_object(SuitEnvelope::Authentication)?;
+        let auth_object = self.get_object(SuitEnvelope::Authentication.into())?;
         auth_object.ok_or(Error::NoAuthObject)
     }
 
@@ -335,7 +367,7 @@ impl<'a, S: AuthState> Envelope<'a, S> {
     ///
     /// See [`Envelope::manifest`] for retrieving a [`manifest::Manifest`] to operate on the manifest.
     pub fn manifest_bytes(&self) -> Result<&'a ByteSlice, Error> {
-        let manifest_object = self.get_object(SuitEnvelope::Manifest)?;
+        let manifest_object = self.get_object(SuitEnvelope::Manifest.into())?;
         manifest_object.ok_or(Error::NoManifestObject)
     }
 
@@ -343,6 +375,17 @@ impl<'a, S: AuthState> Envelope<'a, S> {
     pub fn manifest(&self) -> Result<Manifest<'a, S>, Error> {
         let manifest_bytes = self.manifest_bytes()?;
         Ok(Manifest::<S>::from_bytes(manifest_bytes))
+    }
+
+    /// Retrieve the payload.
+    #[cfg(feature = "integrated-payload")]
+    pub fn integrated_payload(&self, uri: &str) -> Result<&'a ByteSlice, Error> {
+        if let Ok(Some(payload)) = self.get_object(crate::SearchKey::Uri(uri)) {
+            Ok(payload)
+        }
+        else {
+            Err(Error::NoIntegratedPayload)
+        }
     }
 }
 

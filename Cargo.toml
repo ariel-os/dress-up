@@ -30,6 +30,7 @@ openssl = "0.10.77"
 
 [features]
 default = ["sha384", "sha512", "shake128", "shake256"]
+integrated-payload = []
 sha384 = []
 sha512 = []
 shake128 = ["dep:sha3"]

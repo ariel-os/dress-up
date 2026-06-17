@@ -10,7 +10,7 @@ use crate::command::CommandSequence;
 use crate::component::{ComponentInfo, ComponentIter};
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
-use crate::{AuthState, Authenticated, OperatingHooks};
+use crate::{AuthState, Authenticated, Envelope, OperatingHooks};
 
 /// Inner SUIT manifest.
 #[derive(Debug, Clone)]
@@ -164,6 +164,7 @@ impl<'a> Manifest<'a, Authenticated> {
         &self,
         os_hooks: &impl OperatingHooks,
         section: crate::consts::Manifest,
+        envelope: &'a crate::Envelope<'a, Authenticated>,
     ) -> Result<(), Error> {
         let start_state = ManifestState::default();
         let command_section =
@@ -188,8 +189,9 @@ impl<'a> Manifest<'a, Authenticated> {
                     start_state.clone(),
                     &component_info,
                     os_hooks,
+                    envelope
                 )?;
-                command_section.execute(state, &component_info, os_hooks)?;
+                command_section.execute(state, &component_info, os_hooks, envelope)?;
             }
         }
         Ok(())
@@ -199,8 +201,8 @@ impl<'a> Manifest<'a, Authenticated> {
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// payload fetch is executed.
-    pub fn execute_payload_fetch(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
-        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadFetch)
+    pub fn execute_payload_fetch(&self, os_hooks: &impl OperatingHooks, envelope: &Envelope<'a, Authenticated>) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadFetch, envelope)
     }
 
     /// Execute the command sequence in the payload installation section.
@@ -210,38 +212,39 @@ impl<'a> Manifest<'a, Authenticated> {
     pub fn execute_payload_installation(
         &self,
         os_hooks: &impl OperatingHooks,
+        envelope: &Envelope<'a, Authenticated>,
     ) -> Result<(), Error> {
-        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadInstallation)
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadInstallation, envelope)
     }
 
     /// Execute the command sequence in the image validation section.
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// image validation is executed.
-    pub fn execute_image_validation(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
-        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageValidation)
+    pub fn execute_image_validation(&self, os_hooks: &impl OperatingHooks, envelope: &Envelope<'a, Authenticated>) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageValidation, envelope)
     }
 
     /// Execute the command sequence in the image loading section.
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// image loading is executed.
-    pub fn execute_image_loading(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
-        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageLoading)
+    pub fn execute_image_loading(&self, os_hooks: &impl OperatingHooks, envelope: &Envelope<'a, Authenticated>) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageLoading, envelope)
     }
 
     /// Execute the command sequence in the image loading section.
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// invoke is executed.
-    pub fn execute_invoke(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
-        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageInvocation)
+    pub fn execute_invoke(&self, os_hooks: &impl OperatingHooks, envelope: &Envelope<'a, Authenticated>) -> Result<(), Error> {
+        self.execute_section_with_common(os_hooks, crate::consts::Manifest::ImageInvocation, envelope)
     }
 
     /// Execute all command sequences in the manifest.
-    pub fn execute_full(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
+    pub fn execute_full(&self, os_hooks: &impl OperatingHooks, envelope: &Envelope<'a, Authenticated>) -> Result<(), Error> {
         for section in crate::consts::SUIT_COMMAND_SECTIONS {
-            let res = self.execute_section_with_common(os_hooks, section);
+            let res = self.execute_section_with_common(os_hooks, section, envelope);
             // Ignore NoCommandSequence errors
             if res.is_err_and(|e| !matches!(e, Error::NoCommandSection { .. })) {
                 return res;

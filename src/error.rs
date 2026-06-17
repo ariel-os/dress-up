@@ -47,6 +47,9 @@ pub enum Error {
     },
     /// No component list inside the SUIT common section
     NoComponentList,
+    #[cfg(feature = "integrated-payload")]
+    /// No integrated payload found inside the SUIT envelope.
+    NoIntegratedPayload,
     /// No manifest object found inside the SUIT envelope.
     NoManifestObject,
     /// No manifest encoding version found inside the manifest object.
@@ -150,6 +153,8 @@ impl core::fmt::Display for Error {
                 write!(f, "no command sequence {section} found in manifest")
             }
             Self::NoComponentList => write!(f, "no component list found in manifest"),
+            #[cfg(feature = "integrated-payload")]
+            Self::NoIntegratedPayload => write!(f, "no integrated payload found in envelope"),
             Self::NoManifestObject => write!(f, "no Manifest object in manifest"),
             Self::NoManifestVersion => write!(f, "no Manifest version in manifest"),
             Self::NoSequenceNumber => write!(f, "no Manifest sequence number in manifest"),
