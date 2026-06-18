@@ -178,19 +178,18 @@ impl<'a> Manifest<'a, Authenticated> {
             .map_err(|e| e.add_offset(common.component_offset))?
             .enumerate()
         {
-            if let Ok(component) = component {
-                let idx = idx.try_into().map_err(|_| Error::UnexpectedCbor {
-                    position: self.decoder.position(),
-                })?;
-                let component_info = ComponentInfo::new(component, idx);
+            let component = component.map_err(|e| e.add_offset(common.component_offset))?;
 
-                let state = common.shared_sequence().execute(
-                    start_state.clone(),
-                    &component_info,
-                    os_hooks,
-                )?;
-                command_section.execute(state, &component_info, os_hooks)?;
-            }
+            let idx = idx.try_into().map_err(|_| Error::UnexpectedCbor {
+                position: self.decoder.position(),
+            })?;
+            let component_info = ComponentInfo::new(component, idx);
+
+            let state =
+                common
+                    .shared_sequence()
+                    .execute(start_state.clone(), &component_info, os_hooks)?;
+            command_section.execute(state, &component_info, os_hooks)?;
         }
         Ok(())
     }
