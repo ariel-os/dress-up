@@ -19,7 +19,7 @@ pub const SUIT_COMMAND_SECTIONS: [Manifest; 5] = [
 /// All elements are bstr wrapped.
 ///
 /// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-envelope-elements>
-#[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
+#[derive(Copy, Clone, PartialEq, Debug, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
 #[non_exhaustive]
 #[repr(i16)]
 pub enum SuitEnvelope {

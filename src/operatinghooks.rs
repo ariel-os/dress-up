@@ -80,8 +80,22 @@ pub trait OperatingHooks {
         self.component_capacity(component).map(|_| ())
     }
 
+    #[cfg(not(feature = "integrated-payload"))]
     /// Retrieve the payload from the url and store it in the component.
     fn fetch(&self, _component: &Component, _slot: Option<u64>, _uri: &str) -> Result<(), Error> {
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::Fetch.into(),
+        })
+    }
+
+    #[cfg(feature = "integrated-payload")]
+    /// Store the integrated payload in the component.
+    fn fetch(
+        &self,
+        _component: &Component,
+        _slot: Option<u64>,
+        _payload: &[u8],
+    ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
             command: SuitCommand::Fetch.into(),
         })

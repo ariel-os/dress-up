@@ -13,7 +13,7 @@ use crate::consts::SuitCommand;
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
 use crate::report::ReportingPolicy;
-use crate::OperatingHooks;
+use crate::{Authenticated, Envelope, OperatingHooks};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -175,10 +175,11 @@ impl<'a> CommandSequence<'a> {
         state: ManifestState<'a>,
         component_info: &'a ComponentInfo<'a>,
         os_hooks: &'a impl OperatingHooks,
+        envelope: &Envelope<'a, Authenticated>
     ) -> Result<ManifestState<'a>, Error> {
         let executor = CommandSequenceExecutor::new(self.sequence, self.offset, os_hooks);
         executor
-            .process(state, component_info)
+            .process(state, component_info, envelope)
             .map_err(|e| e.add_offset(self.offset))
     }
 
@@ -246,6 +247,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         state: &mut ManifestState<'a>,
         component_info: &'a ComponentInfo<'a>,
         decoder: &mut Decoder<'a>,
+        envelope: &Envelope<'a, Authenticated>,
     ) -> Result<(), Error> {
         let mut err_position = 0;
         let input = decoder.input(); // used for getting the position of the error
@@ -258,6 +260,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 state.clone(),
                 component_info,
                 self.os_hooks,
+                envelope,
             );
             match res {
                 Ok(res) => {
@@ -288,6 +291,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         component_info: &'a ComponentInfo<'a>,
         match_component: &mut bool,
         mut command: Command<'a>,
+        envelope: &Envelope<'a, Authenticated>,
     ) -> Result<(), Error> {
         let component = component_info.component();
         let argument_offset = command.get_argument_offset();
@@ -307,6 +311,13 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 state
                     .update_parameter(&mut argument)
                     .map_err(|e| e.add_offset(argument_offset))?;
+
+                #[cfg(feature = "integrated-payload")]
+                if state.payload.is_none() {
+                    if let Some(uri) = state.uri {
+                        state.set_payload(envelope.integrated_payload(uri)?);
+                    }
+                }
             }
             SuitCommand::SetComponentIndex => {
                 *match_component = component_info.in_applylist(command.get_argument_cbor()?)?;
@@ -343,7 +354,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
             })?,
             SuitCommand::TryEach => {
                 let mut argument = command.get_argument_cbor()?.clone();
-                self.try_each(state, component_info, &mut argument)?
+                self.try_each(state, component_info, &mut argument, envelope)?
             }
             SuitCommand::VendorIdentifier => {
                 self.cond_vendor_identifier(state, component)?;
@@ -360,6 +371,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         &self,
         mut state: ManifestState<'a>,
         component_info: &'a ComponentInfo<'a>,
+        envelope: &Envelope<'a, Authenticated>,
     ) -> Result<ManifestState<'a>, Error> {
         let mut match_component = true;
         for command in CommandSequenceIterator::new(self.command_sequence, self.offset)? {
@@ -378,7 +390,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     }
                 }
             } else {
-                self.process_command(&mut state, component_info, &mut match_component, command)
+                self.process_command(&mut state, component_info, &mut match_component, command, envelope)
                     .map_err(|e| e.add_offset(position))?;
             }
         }
@@ -524,6 +536,17 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
     }
 
     fn directive_fetch(&self, state: &ManifestState, component: &Component) -> Result<(), Error> {
+        #[cfg(feature = "integrated-payload")]
+        return self.os_hooks.fetch(
+            component,
+            state.component_slot,
+            state
+                .payload
+                .ok_or(Error::NoIntegratedPayload)?
+                .as_ref(),
+        );
+
+        #[cfg(not(feature = "integrated-payload"))]
         if let Some(uri) = state.uri {
             self.os_hooks.fetch(component, state.component_slot, uri)
         } else {
@@ -661,7 +684,7 @@ mod tests {
         let info = create_test_component();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::InvalidCommandSequence { position: 0 });
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -678,7 +701,7 @@ mod tests {
         let info = create_test_component();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::InvalidCommandSequence { position: 0 });
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -695,7 +718,7 @@ mod tests {
         let info = create_test_component();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
         let state = ManifestState::default();
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::UnsupportedCommand { command: 0 });
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -712,7 +735,7 @@ mod tests {
         let info = create_test_component();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
 
-        let res = sequence.process(state, &info).unwrap();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap();
         assert_eq!(res.component_slot, None);
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -729,7 +752,7 @@ mod tests {
         let info = create_test_component();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
 
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::ParameterNotSet { position: 1 });
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -755,7 +778,7 @@ mod tests {
         let mut state = ManifestState::default();
         let info = create_test_component();
 
-        let res = sequence.process(state.clone(), &info);
+        let res = sequence.process(state.clone(), &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData });
 
         let digest_bytes: &[u8] = &std::vec![
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
@@ -795,7 +818,7 @@ mod tests {
         let info = create_test_component();
 
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info);
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData });
         assert!(res.is_ok());
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -821,7 +844,7 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info).unwrap();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap();
         assert_eq!(res.component_slot, Some(2));
 
         let sequence = CommandSequence::new(input.into(), 0);
@@ -838,14 +861,14 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::TryEachFail { position: 5 });
 
         let input: &[u8] =
             &std::vec![0x82, 0x0F, 0x82, 0x43, 0x82, 0x0E, 0x05, 0x43, 0x82, 0x0E, 0x05];
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::TryEachFail { position: 9 });
     }
 
@@ -860,7 +883,7 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info).unwrap_err();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap_err();
         assert_eq!(res, Error::UnsupportedParameter { parameter: 0 });
     }
 
@@ -874,7 +897,7 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state, &info).unwrap();
+        let res = sequence.process(state, &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData }).unwrap();
         assert_eq!(res.component_slot, Some(2));
     }
 
@@ -886,7 +909,7 @@ mod tests {
 
         let state = ManifestState::default();
         let sequence = CommandSequenceExecutor::new(input.into(), 0, &hooks);
-        let res = sequence.process(state.clone(), &info);
+        let res = sequence.process(state.clone(), &info, &Envelope { decoder: Decoder::new(&[]), phantom: crate::PhantomData });
         assert_eq!(res, Ok(state));
 
         let sequence = CommandSequence::new(input.into(), 0);

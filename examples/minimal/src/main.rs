@@ -162,7 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     println!("Verified manifest signature");
     let envelope = suit.envelope()?;
     let manifest = envelope.manifest()?;
-    manifest.execute_payload_installation(&hooks)?;
+    manifest.execute_payload_installation(&hooks, &envelope)?;
     let storage = hooks.storage.take();
     println!("Storage now contains: {:02x?}", storage);
     Ok(())

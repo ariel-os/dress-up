@@ -21,6 +21,8 @@ pub(crate) struct ManifestState<'a> {
     pub(crate) component_slot: Option<u64>,
     pub(crate) image_size: Option<usize>,
     pub(crate) uri: Option<&'a str>,
+    #[cfg(feature = "integrated-payload")]
+    pub(crate) payload: Option<&'a ByteSlice>,
 }
 
 impl<'a> ManifestState<'a> {
@@ -111,6 +113,17 @@ impl<'a> ManifestState<'a> {
     pub(crate) fn uri_from_cbor(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
         let uri = decoder.str()?;
         self.set_uri(uri);
+        Ok(())
+    }
+
+    #[cfg(feature = "integrated-payload")]
+    pub(crate) fn set_payload(&mut self, payload: &'a ByteSlice) {
+        self.payload = Some(payload);
+    }
+
+    #[cfg(feature = "integrated-payload")]
+    pub(crate) fn payload_from_cbor(&mut self, decoder: &mut Decoder<'a>) -> Result<(), Error> {
+        self.set_payload(decoder.decode()?);
         Ok(())
     }
 
