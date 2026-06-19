@@ -1,6 +1,6 @@
 [package]
 name = "dress-up"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "`no_std` SUIT manifest parser"
 homepage = "https://github.com/ariel-os/dress-up/"
