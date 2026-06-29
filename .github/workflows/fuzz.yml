@@ -1,0 +1,70 @@
+name: Fuzz
+on:
+  push:
+  pull_request:
+  schedule:
+    # Weekly on Sundays at 00:01 UTC
+    - cron: "1 0 * * 0"
+
+env:
+  CARGO_TERM_COLOR: always
+  NIGHTLY_TOOLCHAIN: nightly-2026-06-01
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fuzz (unauth)"
+            target: "raw_unauth"
+          - name: "Fuzz (auth, no structure-awareness)"
+            target: "raw_auth"
+          - name: "Fuzz (auth, structure-awareness)"
+            target: "suit_manifest_auth"
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup (install Rust nightly, cargo-fuzz, coverage tools)
+        run: |
+          rustup toolchain install "$NIGHTLY_TOOLCHAIN"
+          rustup default "$NIGHTLY_TOOLCHAIN"
+          cargo install cargo-fuzz
+          rustup component add --toolchain "$NIGHTLY_TOOLCHAIN" llvm-tools-preview
+
+      - name: Compute timestamp (for naming archives)
+        id: ts
+        shell: bash
+        run: |
+          echo "stamp=$(date -u +'%Y%m%d_%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Build fuzz target
+        run: cargo fuzz build ${{ matrix.target }}
+
+      - name: Run fuzz target
+        # 1h on push/PR, 24h on weekly schedule
+        run: |
+          MAX_TIME=3600
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MAX_TIME=86400
+          fi
+          ./fuzz/scripts/run_fuzz.sh ${{ matrix.target }} -- -timeout=10 -max_total_time=$MAX_TIME
+
+      - name: Create code coverage reports
+        if: ${{ always() }}
+        run: ./fuzz/scripts/fuzz_cov.sh ${{ matrix.target }}
+
+      - name: Archive corpus, artifacts and results directory (metrics and cov reports)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ts.outputs.stamp }}_${{ matrix.target }}-export
+          path: |
+            fuzz/corpus/**
+            fuzz/artifacts/**
+            fuzz/results/**

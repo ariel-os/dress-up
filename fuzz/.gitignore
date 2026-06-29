@@ -1,0 +1,10 @@
+.env
+target
+corpus
+corpus_bkp
+artifacts
+coverage
+.vscode
+debug_test
+*.html
+results

@@ -1,0 +1,51 @@
+[package]
+name = "fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[profile.dev]
+debug = 2
+opt-level = 0
+
+[profile.release]
+debug = 2
+opt-level = 1
+lto = false
+codegen-units = 1
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+dress-up = { path = ".." }
+uuid = { version = "1.18.1", default-features = false }
+digest = { version = "0.10.7", default-features = false }
+generic-array = { version = "1.3.5", features = ["const-default"] }
+cbor-edn = { version = "0.0.10", default-features = false }
+
+cose-rust = "0.1.8"
+openssl = "0.10.77"
+sha2 = "0.11.0"
+
+[[bin]]
+name = "raw_unauth"
+path = "fuzz_targets/raw_unauth.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "raw_auth"
+path = "fuzz_targets/raw_auth.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "suit_manifest_auth"
+path = "fuzz_targets/suit_manifest_auth.rs"
+test = false
+doc = false
+bench = false
