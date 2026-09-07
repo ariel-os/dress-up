@@ -1,7 +1,8 @@
 //! SUIT authentication structure
 //!
 //! Packed in the manifest as bstr wrapper array.
-//! Contains the digest of the manifest, and a set of authentication blocks.
+//! Contains the mandatory digest of the manifest, and an optional set of authentication blocks.
+//! When no authentication block is present, the manifest digest alone is considered sufficient.
 
 use minicbor::{bytes::ByteSlice, Decoder};
 
@@ -24,8 +25,8 @@ impl<'a> Authentication<'a> {
             position: decoder.position(),
         })?;
 
-        // Structure must contain at least one suit_digest and one COSE auth
-        if len < 2 {
+        // Structure must at least contain the suit_digest; COSE auth blocks are optional
+        if len < 1 {
             return Err(Error::InvalidAuthenticationStructure);
         }
         let num_auth =
@@ -49,6 +50,11 @@ impl<'a> Authentication<'a> {
     where
         F: Fn(&[u8], &[u8]) -> Result<bool, Error>,
     {
+        // No COSE auth block present: the manifest digest, already verified in `new`, is
+        // sufficient on its own.
+        if self.num_auth == 0 {
+            return Ok(());
+        }
         let mut decoder = self.decoder.clone();
         for _ in 0..self.num_auth {
             let auth_block = decoder.bytes()?;
@@ -85,5 +91,23 @@ mod tests {
 
         let res = auth.authenticate(|_cose, _payload| Ok(false));
         assert_eq!(res, Err(Error::AuthenticationFailure));
+    }
+
+    #[test]
+    fn auth_decode_digest_only() {
+        // Same digest as `auth_decode`, but without any COSE authentication block.
+        let manifest: &[u8] = &std::vec![];
+        let input: &[u8] = &std::vec![
+            0x81, 0x58, 0x24, 0x82, 0x2F, 0x58, 0x20, 0xE3, 0xB0, 0xC4, 0x42, 0x98, 0xFC, 0x1C,
+            0x14, 0x9A, 0xFB, 0xF4, 0xC8, 0x99, 0x6F, 0xB9, 0x24, 0x27, 0xAE, 0x41, 0xE4, 0x64,
+            0x9B, 0x93, 0x4C, 0xA4, 0x95, 0x99, 0x1B, 0x78, 0x52, 0xB8, 0x55,
+        ];
+
+        let auth = Authentication::new(input.into(), manifest.into()).unwrap();
+        assert_eq!(auth.num_auth, 0);
+
+        // Digest already validated in `new`; the closure must not even be called.
+        let res = auth.authenticate(|_cose, _payload| Ok(false));
+        assert_eq!(res, Ok(()));
     }
 }

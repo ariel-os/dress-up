@@ -268,6 +268,11 @@ impl<'a> SuitManifest<'a, New> {
     }
 
     /// Authenticate a manifest.
+    ///
+    /// The manifest digest is always verified. The `authenticate` closure is only invoked, once
+    /// per COSE authentication block, when the authentication object carries at least one such
+    /// block; manifests carrying only a digest and no authentication block are accepted based on
+    /// the digest match alone.
     pub fn authenticate<F>(self, authenticate: F) -> Result<SuitManifest<'a, Authenticated>, Error>
     where
         F: Fn(&[u8], &[u8]) -> Result<bool, Error>,
