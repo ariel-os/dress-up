@@ -228,7 +228,7 @@ impl<'a> CommandSequence<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CommandSequenceExecutor<'a, O: OperatingHooks> {
+pub(crate) struct CommandSequenceExecutor<'a, O> {
     command_sequence: &'a ByteSlice,
     // Components list is needed by Copy and swap
     components: &'a ByteSlice,
