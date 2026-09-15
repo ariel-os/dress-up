@@ -87,6 +87,38 @@ impl<'a> Component<'a> {
                 Err(e) => Err(e),
             })
     }
+
+    /// returns an iterator over the individual segments of a component location.
+    pub fn iter_segments(&self) -> Result<ComponentIdentifierIter<'a>, Error> {
+        let decoder = Decoder::new(self.cbor);
+        ComponentIdentifierIter::new(decoder)
+    }
+}
+
+/// Iterator over the byte string components of a component identifier.
+pub struct ComponentIdentifierIter<'a> {
+    decoder: Decoder<'a>,
+    remaining: u64,
+}
+
+impl<'a> ComponentIdentifierIter<'a> {
+    pub(crate) fn new(mut decoder: Decoder<'a>) -> Result<Self, Error> {
+        let Some(remaining) = decoder.array()? else {
+            return Err(Error::UnexpectedIndefiniteLength { position: 0 });
+        };
+        Ok(Self { decoder, remaining })
+    }
+}
+
+impl<'a> Iterator for ComponentIdentifierIter<'a> {
+    type Item = Result<&'a [u8], Error>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        Some(self.decoder.bytes().map_err(core::convert::Into::into))
+    }
 }
 
 pub(crate) struct ComponentIter<'a, 'b> {
@@ -187,5 +219,17 @@ mod tests {
         let mut s: String<2> = String::new();
         let res = component.as_string(&mut s, "/");
         assert!(matches!(res, Err(Error::CapacityError)));
+    }
+
+    #[test]
+    fn component_identifier_iter() {
+        let input = std::vec![0x81, 0x82, 0x41, 0x61, 0x41, 0x62];
+        let mut decoder = Decoder::new(&input);
+        let mut components = ComponentIter::new(&mut decoder).unwrap();
+        let component = components.next().unwrap().unwrap();
+        let mut iter = component.iter_segments().unwrap();
+        assert_eq!(&[0x61], iter.next().unwrap().unwrap());
+        assert_eq!(&[0x62], iter.next().unwrap().unwrap());
+        assert_eq!(None, iter.next());
     }
 }
