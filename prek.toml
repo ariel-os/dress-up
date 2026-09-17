@@ -1,7 +1,7 @@
 [[repos]]
 repo = "builtin"
 hooks = [
-  { id = "end-of-file-fixer", args = ["--fix"] },
+  { id = "end-of-file-fixer" },
   { id = "trailing-whitespace" },
   { id = "check-case-conflict" },
   { id = "mixed-line-ending", args = ["--fix=lf"] },
