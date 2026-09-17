@@ -210,6 +210,8 @@ use crate::consts::{SuitEnvelope, SUIT_TAG_ENVELOPE};
 use crate::error::Error;
 use crate::manifest::Manifest;
 
+#[cfg(feature = "async")]
+pub use crate::operatinghooks::AsyncOperatingHooks;
 pub use crate::operatinghooks::OperatingHooks;
 
 /// Authentication state of the manifest

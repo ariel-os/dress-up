@@ -1,4 +1,5 @@
 //! Inner SUIT manifest.
+use core::future::Future;
 use core::marker::PhantomData;
 
 use minicbor::bytes::ByteSlice;
@@ -10,7 +11,7 @@ use crate::command::CommandSequence;
 use crate::component::{ComponentInfo, ComponentIter};
 use crate::error::Error;
 use crate::manifeststate::ManifestState;
-use crate::{AuthState, Authenticated, OperatingHooks};
+use crate::{AsyncOperatingHooks, AuthState, Authenticated, OperatingHooks};
 
 /// Inner SUIT manifest.
 #[derive(Debug, Clone)]
@@ -239,6 +240,122 @@ impl<'a> Manifest<'a, Authenticated> {
     pub fn execute_full(&self, os_hooks: &impl OperatingHooks) -> Result<(), Error> {
         for section in crate::consts::SUIT_COMMAND_SECTIONS {
             let res = self.execute_section_with_common(os_hooks, section);
+            // Ignore NoCommandSequence errors
+            if res.is_err_and(|e| !matches!(e, Error::NoCommandSection { .. })) {
+                return res;
+            }
+        }
+        Ok(())
+    }
+
+    async fn async_execute_section_with_common(
+        &self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+        section: crate::consts::Manifest,
+    ) -> Result<(), Error> {
+        let start_state = ManifestState::default();
+        let command_section =
+            self.find_command_sequence(section)?
+                .ok_or(Error::NoCommandSection {
+                    section: section.into(),
+                })?;
+
+        let common = self.get_common()?;
+        let mut component_decoder = Decoder::new(common.components);
+        for (idx, component) in ComponentIter::new(&mut component_decoder)
+            .map_err(|e| e.add_offset(common.component_offset))?
+            .enumerate()
+        {
+            let component = component.map_err(|e| e.add_offset(common.component_offset))?;
+
+            let idx = idx.try_into().map_err(|_| Error::UnexpectedCbor {
+                position: self.decoder.position(),
+            })?;
+            let component_info = ComponentInfo::new(component, idx);
+
+            let state = common
+                .shared_sequence()
+                .async_execute(
+                    start_state.clone(),
+                    &component_info,
+                    common.components,
+                    os_hooks,
+                )
+                .await?;
+            command_section
+                .async_execute(state, &component_info, common.components, os_hooks)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Execute the command sequence in the payload fetch section, async version.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// payload fetch is executed.
+    pub fn async_execute_payload_fetch(
+        &'a self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::PayloadFetch)
+    }
+
+    /// Execute the command sequence in the payload installation section, async version.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// payload installation is executed.
+    pub fn async_execute_payload_installation(
+        &'a self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.async_execute_section_with_common(
+            os_hooks,
+            crate::consts::Manifest::PayloadInstallation,
+        )
+    }
+
+    /// Execute the command sequence in the image validation section, async version.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// image validation is executed.
+    pub fn async_execute_image_validation<T: AsyncOperatingHooks>(
+        &'a self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageValidation)
+    }
+
+    /// Execute the command sequence in the image loading section, async version.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// image loading is executed.
+    pub fn async_execute_image_loading<T: AsyncOperatingHooks>(
+        &'a self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageLoading)
+    }
+
+    /// Execute the command sequence in the image loading section, async version.
+    ///
+    /// The command sequence in the common section is executed before the command sequence in the
+    /// invoke is executed.
+    pub fn async_execute_invoke(
+        &'a self,
+        os_hooks: &'a impl AsyncOperatingHooks,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.async_execute_section_with_common(os_hooks, crate::consts::Manifest::ImageInvocation)
+    }
+
+    /// Execute all command sequences in the manifest.
+    pub async fn async_execute_full(
+        &self,
+        os_hooks: &impl AsyncOperatingHooks,
+    ) -> Result<(), Error> {
+        for section in crate::consts::SUIT_COMMAND_SECTIONS {
+            let res = self
+                .async_execute_section_with_common(os_hooks, section)
+                .await;
             // Ignore NoCommandSequence errors
             if res.is_err_and(|e| !matches!(e, Error::NoCommandSection { .. })) {
                 return res;
