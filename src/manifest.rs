@@ -318,7 +318,7 @@ impl<'a> Manifest<'a, Authenticated> {
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// image validation is executed.
-    pub fn async_execute_image_validation<T: AsyncOperatingHooks>(
+    pub fn async_execute_image_validation(
         &'a self,
         os_hooks: &'a impl AsyncOperatingHooks,
     ) -> impl Future<Output = Result<(), Error>> + 'a {
@@ -329,7 +329,7 @@ impl<'a> Manifest<'a, Authenticated> {
     ///
     /// The command sequence in the common section is executed before the command sequence in the
     /// image loading is executed.
-    pub fn async_execute_image_loading<T: AsyncOperatingHooks>(
+    pub fn async_execute_image_loading(
         &'a self,
         os_hooks: &'a impl AsyncOperatingHooks,
     ) -> impl Future<Output = Result<(), Error>> + 'a {
