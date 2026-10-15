@@ -59,10 +59,14 @@ impl<'a> CommandArgument<'a> {
     }
 }
 
+/// SUIT Command as found in the manifest.
 #[derive(Clone, Debug)]
 pub(crate) struct Command<'a> {
+    /// SUIT command label.
     pub(crate) label: SuitCommand,
+    /// Argument for the command.
     pub(crate) argument: CommandArgument<'a>,
+    /// Position in the manifest.
     pub(crate) position: usize,
 }
 
@@ -74,7 +78,8 @@ impl<'a> Command<'a> {
         {
             return Ok(decoder);
         }
-        Err(Error::InvalidCommandSequence {
+        Err(Error::MissingCborArgument {
+            command: self.label,
             position: self.position,
         })
     }
@@ -91,7 +96,8 @@ impl<'a> Command<'a> {
         if let CommandArgument::Report(policy) = self.argument {
             return Ok(policy);
         }
-        Err(Error::InvalidCommandSequence {
+        Err(Error::MissingReportPolicy {
+            command: self.label,
             position: self.position,
         })
     }
@@ -279,11 +285,12 @@ impl<'a, O> CommandSequenceExecutor<'a, O> {
         match command.label {
             SuitCommand::Unset => {
                 return Err(Error::UnsupportedCommand {
-                    command: command.label.into(),
+                    command: command.label,
                 })
             }
             SuitCommand::Abort => {
                 return Err(Error::ConditionMatchFail {
+                    command: SuitCommand::Abort,
                     position: command.position,
                 })
             }
@@ -298,7 +305,7 @@ impl<'a, O> CommandSequenceExecutor<'a, O> {
             }
             _ => {
                 return Err(Error::UnsupportedCommand {
-                    command: command.label.into(),
+                    command: command.label,
                 });
             }
         }
@@ -331,7 +338,7 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     *state = res;
                     return Ok(());
                 }
-                Err(Error::ConditionMatchFail { position }) => {
+                Err(Error::ConditionMatchFail { position, .. }) => {
                     // This requires pointer arithmetic (via element_offset) because offsets get
                     // lost during bytestring wrapping
                     if let Some(element) = sequence.get(position) {
@@ -378,10 +385,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 self.cond_image_match(state, component)?;
             }
             SuitCommand::Invoke => Err(Error::UnsupportedCommand {
-                command: SuitCommand::Invoke.into(),
+                command: SuitCommand::Invoke,
             })?,
             SuitCommand::RunSequence => Err(Error::UnsupportedCommand {
-                command: SuitCommand::RunSequence.into(),
+                command: SuitCommand::RunSequence,
             })?,
             SuitCommand::Swap => self.directive_swap(state, component_info, self.components)?,
             SuitCommand::TryEach => {
@@ -395,10 +402,8 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 self.directive_write(state, component)?;
             }
             SuitCommand::Custom(n) => {
-                if n < -256 {
-                    return Err(Error::UnsupportedCommand {
-                        command: command.label.into(),
-                    });
+                if n > -256 {
+                    return Err(Error::NotACommand { label: n });
                 }
                 self.custom_command(n, state, component)?;
             }
@@ -448,7 +453,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::ClassIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -468,7 +476,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::VendorIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -488,7 +499,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::DeviceIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -508,7 +522,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::ComponentSlot,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -524,7 +541,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
         if let Some(content) = &state.content {
             let size = self.os_hooks.component_size(component)?;
             if size != content.len() {
-                return Err(Error::ConditionMatchFail { position: 0 });
+                return Err(Error::ConditionMatchFail {
+                    command: SuitCommand::CheckContent,
+                    position: 0,
+                });
             }
             let mut choice = Choice::TRUE;
             let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
@@ -534,15 +554,22 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 let buf = &mut buf[0..read_size];
                 self.os_hooks
                     .component_read(component, state.component_slot, offset, buf)?;
-                let manifest_content = content
-                    .get(offset..(offset + read_size))
-                    .ok_or(Error::ConditionMatchFail { position: 0 })?;
+                let manifest_content =
+                    content
+                        .get(offset..(offset + read_size))
+                        .ok_or(Error::ConditionMatchFail {
+                            command: SuitCommand::CheckContent,
+                            position: 0,
+                        })?;
                 choice = choice.and(manifest_content.ct_eq(buf));
             }
             if choice.to_bool() {
                 Ok(())
             } else {
-                Err(Error::ConditionMatchFail { position: 0 })
+                Err(Error::ConditionMatchFail {
+                    command: SuitCommand::CheckContent,
+                    position: 0,
+                })
             }
         } else {
             Err(Error::ParameterNotSet { position: 0 })
@@ -566,7 +593,10 @@ impl<'a, O: OperatingHooks> CommandSequenceExecutor<'a, O> {
                 if b {
                     Ok(())
                 } else {
-                    Err(Error::ConditionMatchFail { position: 0 })
+                    Err(Error::ConditionMatchFail {
+                        command: SuitCommand::ImageMatch,
+                        position: 0,
+                    })
                 }
             })
         } else {
@@ -787,10 +817,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                 self.async_cond_image_match(state, component).await?;
             }
             SuitCommand::Invoke => Err(Error::UnsupportedCommand {
-                command: SuitCommand::Invoke.into(),
+                command: SuitCommand::Invoke,
             })?,
             SuitCommand::RunSequence => Err(Error::UnsupportedCommand {
-                command: SuitCommand::RunSequence.into(),
+                command: SuitCommand::RunSequence,
             })?,
             SuitCommand::Swap => {
                 self.async_directive_swap(state, component_info, self.components)
@@ -803,10 +833,8 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                 self.async_directive_write(state, component).await?;
             }
             SuitCommand::Custom(n) => {
-                if n < -256 {
-                    return Err(Error::UnsupportedCommand {
-                        command: command.label.into(),
-                    });
+                if n > -256 {
+                    return Err(Error::NotACommand { label: n });
                 }
                 self.async_custom_command(n, state, component).await?;
             }
@@ -863,7 +891,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::ClassIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -884,7 +915,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::VendorIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -905,7 +939,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::DeviceIdentifier,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -926,7 +963,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                     if b {
                         Ok(())
                     } else {
-                        Err(Error::ConditionMatchFail { position: 0 })
+                        Err(Error::ConditionMatchFail {
+                            command: SuitCommand::ComponentSlot,
+                            position: 0,
+                        })
                     }
                 })
         } else {
@@ -942,7 +982,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
         if let Some(content) = &state.content {
             let size = self.os_hooks.component_size(component).await?;
             if size != content.len() {
-                return Err(Error::ConditionMatchFail { position: 0 });
+                return Err(Error::ConditionMatchFail {
+                    command: SuitCommand::CheckContent,
+                    position: 0,
+                });
             }
             let mut choice = Choice::TRUE;
             let mut buf = RwBuf::<O::ReadWriteBufferSize>::new().buf;
@@ -953,15 +996,22 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                 self.os_hooks
                     .component_read(component, state.component_slot, offset, buf)
                     .await?;
-                let manifest_content = content
-                    .get(offset..(offset + read_size))
-                    .ok_or(Error::ConditionMatchFail { position: 0 })?;
+                let manifest_content =
+                    content
+                        .get(offset..(offset + read_size))
+                        .ok_or(Error::ConditionMatchFail {
+                            command: SuitCommand::CheckContent,
+                            position: 0,
+                        })?;
                 choice = choice.and(manifest_content.ct_eq(buf));
             }
             if choice.to_bool() {
                 Ok(())
             } else {
-                Err(Error::ConditionMatchFail { position: 0 })
+                Err(Error::ConditionMatchFail {
+                    command: SuitCommand::CheckContent,
+                    position: 0,
+                })
             }
         } else {
             Err(Error::ParameterNotSet { position: 0 })
@@ -990,7 +1040,10 @@ impl<'a, O: AsyncOperatingHooks> CommandSequenceExecutor<'a, O> {
                 if b {
                     Ok(())
                 } else {
-                    Err(Error::ConditionMatchFail { position: 0 })
+                    Err(Error::ConditionMatchFail {
+                        command: SuitCommand::CheckContent,
+                        position: 0,
+                    })
                 }
             })
         } else {
@@ -1460,7 +1513,12 @@ mod tests {
             CommandSequenceExecutor::new(input.into(), create_empty_components(), 0, &hooks);
         let state = ManifestState::default();
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::UnsupportedCommand { command: 0 });
+        assert_eq!(
+            res,
+            Error::UnsupportedCommand {
+                command: SuitCommand::Unset
+            }
+        );
 
         let sequence = CommandSequence::new(input.into(), 0);
         let properties = sequence.properties();
@@ -1674,7 +1732,12 @@ mod tests {
         let sequence =
             CommandSequenceExecutor::new(input.into(), create_empty_components(), 0, &hooks);
         let res = sequence.process(state, &info).unwrap_err();
-        assert_eq!(res, Error::UnsupportedParameter { parameter: 0 });
+        assert_eq!(
+            res,
+            Error::UnsupportedParameter {
+                parameter: crate::consts::SuitParameter::Unset
+            }
+        );
     }
 
     #[test]

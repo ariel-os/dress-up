@@ -51,7 +51,7 @@ impl<'a, S: AuthState> Manifest<'a, S> {
                 if version == crate::consts::SUIT_SUPPORTED_VERSION {
                     return Ok(version);
                 }
-                return Err(Error::UnsupportedManifestVersion);
+                return Err(Error::UnsupportedManifestVersion { version });
             }
             decoder.skip()?;
         }

@@ -35,7 +35,7 @@ pub trait OperatingHooks {
     /// Installations without multiple components can ignore the `component` parameter.
     fn match_device_id(&self, _uuid: Uuid, _component: &Component) -> Result<bool, Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::DeviceIdentifier.into(),
+            command: SuitCommand::DeviceIdentifier,
         })
     }
 
@@ -49,7 +49,7 @@ pub trait OperatingHooks {
         _component_slot: u64,
     ) -> Result<bool, Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::DeviceIdentifier.into(),
+            command: SuitCommand::DeviceIdentifier,
         })
     }
 
@@ -85,7 +85,7 @@ pub trait OperatingHooks {
     /// Retrieve the payload from the url and store it in the component.
     fn fetch(&self, _component: &Component, _slot: Option<u64>, _uri: &str) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Fetch.into(),
+            command: SuitCommand::Fetch,
         })
     }
 
@@ -96,14 +96,14 @@ pub trait OperatingHooks {
         _arguments: &minicbor::bytes::ByteSlice,
     ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Fetch.into(),
+            command: SuitCommand::Invoke,
         })
     }
 
     /// Swap the the payload between two component.
     fn swap(&self, _component: &Component, _other: &Component) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Swap.into(),
+            command: SuitCommand::Swap,
         })
     }
 
@@ -114,7 +114,9 @@ pub trait OperatingHooks {
         _state: &ManifestState,
         _component: &Component,
     ) -> Result<(), Error> {
-        Err(Error::UnsupportedCommand { command: number })
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::Custom(number),
+        })
     }
 }
 
@@ -153,7 +155,7 @@ pub trait AsyncOperatingHooks {
         _component: &Component<'_>,
     ) -> Result<bool, Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::DeviceIdentifier.into(),
+            command: SuitCommand::DeviceIdentifier,
         })
     }
 
@@ -167,7 +169,7 @@ pub trait AsyncOperatingHooks {
         _component_slot: u64,
     ) -> Result<bool, Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::DeviceIdentifier.into(),
+            command: SuitCommand::DeviceIdentifier,
         })
     }
 
@@ -208,7 +210,7 @@ pub trait AsyncOperatingHooks {
         _uri: &str,
     ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Fetch.into(),
+            command: SuitCommand::Fetch,
         })
     }
 
@@ -219,14 +221,14 @@ pub trait AsyncOperatingHooks {
         _arguments: &minicbor::bytes::ByteSlice,
     ) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Fetch.into(),
+            command: SuitCommand::Invoke,
         })
     }
 
     /// Swap the the payload between two component.
     async fn swap(&self, _component: &Component<'_>, _other: &Component<'_>) -> Result<(), Error> {
         Err(Error::UnsupportedCommand {
-            command: SuitCommand::Swap.into(),
+            command: SuitCommand::Swap,
         })
     }
 
@@ -237,6 +239,8 @@ pub trait AsyncOperatingHooks {
         _state: &ManifestState<'_>,
         _component: &Component<'_>,
     ) -> Result<(), Error> {
-        Err(Error::UnsupportedCommand { command: number })
+        Err(Error::UnsupportedCommand {
+            command: SuitCommand::Custom(number),
+        })
     }
 }

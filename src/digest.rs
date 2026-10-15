@@ -27,6 +27,18 @@ pub enum SuitDigestAlgorithm {
     Shake256 = -45,
 }
 
+impl core::fmt::Display for SuitDigestAlgorithm {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Sha256 => write!(f, "SHA-256"),
+            Self::Shake128 => write!(f, "SHA-128"),
+            Self::Sha384 => write!(f, "SHA-384"),
+            Self::Sha512 => write!(f, "SHA-512"),
+            Self::Shake256 => write!(f, "SHAKE-256"),
+        }
+    }
+}
+
 /// A digest as provided by a manifest.
 ///
 /// Combines the digest and the algorithm.
@@ -86,7 +98,7 @@ impl<'a> SuitDigest<'a> {
                 digest.finalize_xof_into(&mut output);
                 Ok(**self.digest == output)
             }
-            (_, _) => Err(Error::ConditionMatchFail { position: 0 }),
+            (algo, _hasher) => Err(Error::HashAlgoMismatch { algo, position: 0 }),
         }
     }
 }
@@ -143,11 +155,7 @@ impl Hasher {
             #[cfg(feature = "shake256")]
             SuitDigestAlgorithm::Shake256 => Self::Shake256(sha3::Shake256::default()),
             #[allow(unreachable_patterns)]
-            algo => {
-                return Err(Error::UnsupportedDigestAlgo {
-                    algorithm: algo.into(),
-                })
-            }
+            algo => return Err(Error::UnsupportedDigestAlgo { algorithm: algo }),
         })
     }
 
@@ -303,7 +311,10 @@ mod tests {
         digest.algo = SuitDigestAlgorithm::Sha384; // Don't do this!
         assert_eq!(
             digest.match_hasher(hasher),
-            Err(Error::ConditionMatchFail { position: 0 })
+            Err(Error::HashAlgoMismatch {
+                algo: SuitDigestAlgorithm::Sha384,
+                position: 0
+            })
         );
     }
 
