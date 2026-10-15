@@ -66,9 +66,8 @@ impl<'a> OperatingHooks for OsHooks<'a> {
         _offset: usize,
         _bytes: &[u8],
     ) -> Result<(), dress_up::error::Error> {
-        // return Error instead of todo!()-macro to prevent fuzzer from crashing
-        // TODO: maybe implement minimal logic
-        Err(dress_up::error::Error::EndOfInput)
+        // dummy implementation
+        Ok(())
     }
 
     fn component_size(

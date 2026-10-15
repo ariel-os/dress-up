@@ -9,7 +9,6 @@ use fuzz::{os_hooks::OsHooks, reader::Reader};
 
 fuzz_target!(|data: &[u8]| {
     let mut reader = Reader::new(data);
-    // let payload = "hello world!";
 
     // take random number of bytes as payload
     let n = reader.u8();

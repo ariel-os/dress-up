@@ -43,7 +43,3 @@ pub fn cbor_bstr_header(len: usize) -> Vec<u8> {
         panic!("byte string too large for CBOR definite-length encoding");
     }
 }
-
-// pub fn pack_cbor_uint(data: [u8]) -> [u8] {
-
-// }
