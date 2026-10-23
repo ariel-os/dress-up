@@ -106,7 +106,7 @@ pub enum SuitCommon {
 /// SUIT parameter numbers.
 ///
 /// See <https://datatracker.ietf.org/doc/html/draft-ietf-suit-manifest-34#name-suit-parameters>
-#[derive(Copy, Clone, Debug, num_enum::IntoPrimitive)]
+#[derive(Copy, Clone, Debug, num_enum::IntoPrimitive, PartialEq)]
 #[non_exhaustive]
 #[repr(i32)]
 pub enum SuitParameter {
@@ -173,8 +173,14 @@ impl TryFrom<i32> for SuitParameter {
             22 => Self::SourceComponent,
             23 => Self::InvokeArgs,
             24 => Self::DeviceId,
-            n => return Err(Self::Error::UnsupportedParameter { parameter: n }),
+            n => return Err(Self::Error::NotAParameter { label: n }),
         })
+    }
+}
+
+impl core::fmt::Display for SuitParameter {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
     }
 }
 
@@ -217,7 +223,7 @@ pub enum SuitCommand {
     ///
     /// Stops manifest processing to start execution of the component.
     Invoke = 23,
-    /// Check the supplied vendor identifier in [`SuitParameter::VendorId`] with the vendor identifier stored on the device.
+    /// Check the supplied device identifier in [`SuitParameter::DeviceId`] with the device identifier stored on the device.
     DeviceIdentifier = 24,
     /// Swap the content of two components.
     ///
@@ -321,5 +327,11 @@ impl SuitCommand {
                 | SuitCommand::Swap
                 | SuitCommand::Custom(_)
         )
+    }
+}
+
+impl core::fmt::Display for SuitCommand {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
     }
 }

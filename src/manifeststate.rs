@@ -156,11 +156,7 @@ impl<'a> ManifestState<'a> {
                 SuitParameter::DeviceId => self.device_id_from_cbor(decoder)?,
                 SuitParameter::Content => self.content_from_cbor(decoder)?,
                 SuitParameter::InvokeArgs => self.invoke_args_from_cbor(decoder)?,
-                param => {
-                    return Err(Error::UnsupportedParameter {
-                        parameter: param.into(),
-                    })
-                }
+                param => return Err(Error::UnsupportedParameter { parameter: param }),
             }
         }
         Ok(())
@@ -190,7 +186,9 @@ mod tests {
         let err = params.update_parameter(&mut decoder);
         assert_eq!(
             err.unwrap_err(),
-            Error::UnsupportedParameter { parameter: 0 }
+            Error::UnsupportedParameter {
+                parameter: SuitParameter::Unset
+            }
         );
     }
 
