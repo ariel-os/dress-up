@@ -87,3 +87,54 @@ Run the target with a timeout of 5 seconds for a total duration of 5 minutes on 
 ```bash
 cargo fuzz run envlp_wrap -- fuzz/corpus_envlp_wrap --timeout=5 -max_total_time=300
 ```
+
+
+## Helper scripts
+
+Run these scripts from the project root. The GitHub Actions workflow runs the targets weekly
+(Sunday at 00:01 UTC) and generates coverage in a separate job.
+
+### `run_tests.sh`
+
+Configures the fuzzing run, calls the other two scripts, and logs the output. The runtime is
+in seconds; if no targets are specified, all targets from `cargo fuzz list` are used.
+
+```bash
+./fuzz/scripts/run_tests.sh [--skip-cov] <runtime> [TARGET ...]
+```
+
+For example, run all targets for five minutes each, or skip coverage generation:
+
+```bash
+./fuzz/scripts/run_tests.sh 300
+./fuzz/scripts/run_tests.sh --skip-cov 300 unaware envlp_wrap
+```
+
+Results are saved under a timestamped directory in `fuzz/results/`, including logs, metrics,
+corpora, artifacts, and coverage reports (unless `--skip-cov` is used). The weekly CI workflow
+skips coverage in the fuzzing jobs and generates it in the separate coverage job.
+
+### `run_fuzz.sh`
+
+Prepares the prepopulated corpus for a target and runs it. When calling this script directly,
+build the target first so the build time is not included in the measured runtime:
+
+```bash
+cargo fuzz build unaware
+mkdir -p fuzz/results/metrics
+./fuzz/scripts/run_fuzz.sh unaware fuzz/results/metrics/unaware.json -- -timeout=5 -max_total_time=300
+```
+
+The arguments are the target, a metrics JSON output path, then `--` and optional LibFuzzer
+arguments. `unaware` uses `corpus_complete_manifest`; `envlp_wrap` uses `corpus_inner_manifest`.
+Set `NO_CORPUS=1` to skip copying the prepopulated corpus.
+
+### `fuzz_cov.sh`
+
+Generates HTML and text coverage reports for the specified targets, and combined reports when
+more than one target is provided. It requires the `llvm-tools-preview` Rust component.
+
+```bash
+rustup component add --toolchain nightly llvm-tools-preview
+./fuzz/scripts/fuzz_cov.sh fuzz/results/cov_reports unaware envlp_wrap
+```
