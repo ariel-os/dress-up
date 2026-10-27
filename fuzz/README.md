@@ -114,6 +114,19 @@ Results are saved under a timestamped directory in `fuzz/results/`, including lo
 corpora, artifacts, and coverage reports (unless `--skip-cov` is used). The weekly CI workflow
 skips coverage in the fuzzing jobs and generates it in the separate coverage job.
 
+### Result directory structure
+
+The CI workflow uploads each fuzz run's results as an artifact. After downloading and
+extracting a CI artifact, its directory structure is:
+
+- `artifacts/` and `corpus/`: The corresponding directories produced by the fuzzing run. **Note:** If empty (e.g. because no crash was registered by the fuzzer), the `artifacts/` directory is not added.
+- `cov_reports/`: Text and HTML coverage reports for each target, plus combined reports when
+  multiple targets are run.
+- `metrics/`: One JSON file per target with the fuzzer's exit code and actual runtime, useful
+  for seeing whether it crashed and how long it ran before exiting.
+- `test_logs/`: The complete fuzzer output, preceded by information about the hardware running
+  the tests.
+
 ### `run_fuzz.sh`
 
 Prepares the prepopulated corpus for a target and runs it. When calling this script directly,
