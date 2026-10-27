@@ -1,0 +1,142 @@
+name: Fuzz
+on:
+  schedule:
+    # Weekly on Sundays at 00:01 UTC
+    - cron: "1 0 * * 0"
+
+env:
+  CARGO_TERM_COLOR: always
+  NIGHTLY_TOOLCHAIN: nightly-2026-04-20
+  # Run for 5h 30min --> GitHub runner max is 6h
+  # --> https://docs.github.com/en/actions/reference/limits
+  MAX_TIME: 19800
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fuzz (no structure-awareness)"
+            target: "unaware"
+          - name: "Fuzz (envelope wrapper)"
+            target: "envlp_wrap"
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup
+        run: |
+          rustup toolchain install "$NIGHTLY_TOOLCHAIN"
+          rustup default "$NIGHTLY_TOOLCHAIN"
+          cargo install cargo-fuzz
+
+      - name: Build fuzz target
+        run: cargo fuzz build ${{ matrix.target }}
+
+      - name: Run fuzz tests
+        # coverage is generated in the separate "coverage" job
+        run: ./fuzz/scripts/run_tests.sh $MAX_TIME ${{ matrix.target }} --skip-cov
+
+      - name: Upload intermediate results for coverage job
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-run-${{ matrix.target }}
+          path: |
+            fuzz/results/**
+          include-hidden-files: true
+          retention-days: 1
+
+  coverage:
+    name: "Coverage reports"
+    runs-on: ubuntu-latest
+    needs: fuzz
+    if: ${{ always() }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup
+        run: |
+          rustup toolchain install "$NIGHTLY_TOOLCHAIN"
+          rustup default "$NIGHTLY_TOOLCHAIN"
+          cargo install cargo-fuzz
+          rustup component add --toolchain "$NIGHTLY_TOOLCHAIN" llvm-tools-preview
+
+      - name: Compute timestamp (for naming archives)
+        id: ts
+        shell: bash
+        run: |
+          echo "stamp=$(date -u +'%Y%m%d_%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Download all fuzz run results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fuzz-run-*
+          merge-multiple: true
+          path: fuzz/results
+
+      - name: Restore corpora and locate results directory
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Each fuzz job created its own fuzz/results/<date>/<date_time>/ tree.
+          # Merge them all into the newest one so that the coverage reports and
+          # the final archive live next to the run data.
+          mapfile -t RUN_DIRS < <(find fuzz/results -mindepth 2 -maxdepth 2 -type d | sort)
+
+          if [[ ${#RUN_DIRS[@]} -eq 0 ]]; then
+            echo "No fuzz run directories found in fuzz/results!" >&2
+            exit 1
+          fi
+
+          TARGET_DIR="${RUN_DIRS[-1]}"
+          echo "Merging into: ${TARGET_DIR}"
+
+          for dir in "${RUN_DIRS[@]}"; do
+            [[ "${dir}" == "${TARGET_DIR}" ]] && continue
+            echo "  merging ${dir}"
+            cp -a "${dir}/." "${TARGET_DIR}/"
+            rm -rf "${dir}"
+          done
+
+          # drop now-empty date directories
+          find fuzz/results -mindepth 1 -maxdepth 1 -type d -empty -delete
+
+          # fuzz_cov.sh / cargo fuzz coverage expect the corpora in fuzz/corpus
+          if [[ -d "${TARGET_DIR}/corpus" ]]; then
+            mkdir -p fuzz/corpus
+            cp -a "${TARGET_DIR}/corpus/." fuzz/corpus/
+            echo "Restored corpora:"
+            ls -l fuzz/corpus
+          else
+            echo "No corpus directory found in ${TARGET_DIR}!" >&2
+            exit 1
+          fi
+
+          echo "results_dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate coverage reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          COV_DIR="${{ steps.prep.outputs.results_dir }}/cov_reports"
+          mkdir -p "${COV_DIR}"
+          ./fuzz/scripts/fuzz_cov.sh "${COV_DIR}" unaware envlp_wrap
+
+      - name: Archive complete results directory
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ts.outputs.stamp }}_fuzz-export
+          path: |
+            fuzz/results/**
+          include-hidden-files: true

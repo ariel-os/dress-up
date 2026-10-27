@@ -1,4 +1,8 @@
 target
 corpus
+corpus_bkp*
 artifacts
+artifacts_bkp*
 coverage
+.vscode
+results
